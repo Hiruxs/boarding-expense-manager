@@ -34,6 +34,7 @@
         <button class="tab active" data-tab="members">Members</button>
         <button class="tab" data-tab="expenses">All Expenses</button>
         <button class="tab" data-tab="summary">Balance Summary</button>
+        <button class="tab" data-tab="history">Settlement History</button>
       </div>
 
       <!-- Members Tab -->
@@ -58,6 +59,13 @@
         <h2>Balance Summary</h2>
         <p class="hint">Who has paid more vs who owes money</p>
         <div id="summaryList" class="list"></div>
+      </div>
+
+      <!-- Settlement History Tab -->
+      <div id="historyTab" class="tab-content">
+        <h2>Settlement History</h2>
+        <p class="hint">All recorded payments between members</p>
+        <div id="historyList" class="list"></div>
       </div>
     </div>
   </div>
