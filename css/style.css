@@ -761,3 +761,181 @@ body {
   font-size: 14px;
   margin-top: 10px;
 }
+
+/* ============================================================
+   DASHBOARD - Balance Hero Card
+   ============================================================ */
+.balance-hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 30px 25px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.balance-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent 50%);
+  pointer-events: none;
+}
+
+.balance-hero.positive {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  box-shadow: 0 10px 30px rgba(17, 153, 142, 0.3);
+}
+
+.balance-hero.negative {
+  background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+  box-shadow: 0 10px 30px rgba(235, 51, 73, 0.3);
+}
+
+.balance-hero.settled {
+  background: linear-gradient(135deg, #a8c0ff 0%, #3f2b96 100%);
+}
+
+.balance-label {
+  font-size: 15px;
+  opacity: 0.95;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.balance-amount {
+  font-size: 42px;
+  font-weight: 800;
+  margin: 5px 0;
+  letter-spacing: -1px;
+}
+
+.balance-sub {
+  font-size: 13px;
+  opacity: 0.85;
+  margin-top: 5px;
+}
+
+/* ============================================================
+   DASHBOARD - Breakdown rows
+   ============================================================ */
+.breakdown-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  background: white;
+  border-radius: 10px;
+  border-left: 4px solid #cbd5e0;
+  transition: transform 0.1s;
+}
+
+.breakdown-row:hover {
+  transform: translateX(3px);
+}
+
+.breakdown-row.owe {
+  border-left-color: #e53e3e;
+  background: #fff5f5;
+}
+
+.breakdown-row.owed {
+  border-left-color: #38a169;
+  background: #f0fff4;
+}
+
+.bd-icon {
+  font-size: 20px;
+}
+
+.bd-text {
+  font-size: 15px;
+  color: #2d3748;
+}
+
+.bd-amount {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.breakdown-row.owe .bd-amount {
+  color: #c53030;
+}
+
+.breakdown-row.owed .bd-amount {
+  color: #2f855a;
+}
+
+/* ============================================================
+   ADD BUTTON in topbar
+   ============================================================ */
+.btn-add {
+  background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(17, 153, 142, 0.3);
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+
+.btn-add:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
+}
+
+/* ============================================================
+   FORM HEADER (with close button)
+   ============================================================ */
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.form-header h2 {
+  margin-bottom: 0 !important;
+}
+
+.btn-close {
+  background: #f7fafc;
+  color: #718096;
+  border: 1px solid #e2e8f0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-close:hover {
+  background: #fed7d7;
+  color: #c53030;
+  border-color: #fc8181;
+}
+
+/* Mobile tweaks for topbar */
+@media (max-width: 500px) {
+  .topbar h1 {
+    font-size: 18px;
+  }
+  .balance-amount {
+    font-size: 34px;
+  }
+  .btn-add {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
