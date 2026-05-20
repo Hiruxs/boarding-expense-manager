@@ -32,6 +32,7 @@
       <!-- Tabs -->
       <div class="tabs">
         <button class="tab active" data-tab="members">Members</button>
+        <button class="tab" data-tab="categories">Categories</button>
         <button class="tab" data-tab="expenses">All Expenses</button>
         <button class="tab" data-tab="summary">Balance Summary</button>
         <button class="tab" data-tab="history">Settlement History</button>
@@ -48,6 +49,18 @@
           <button id="addMemberBtn" class="btn-primary">+ Add Member</button>
         </div>
         <div id="membersList" class="list"></div>
+      </div>
+
+      <!-- Categories Tab -->
+      <div id="categoriesTab" class="tab-content">
+        <h2>Manage Categories</h2>
+        <p class="hint">Categories help group expenses (e.g. Food, Electricity). "Other" cannot be deleted.</p>
+        <div class="category-form">
+          <input type="text" id="categoryIcon" placeholder="🍔" maxlength="2" />
+          <input type="text" id="categoryName" placeholder="Category name (e.g. Food)" />
+          <button id="addCategoryBtn" class="btn-primary">+ Add Category</button>
+        </div>
+        <div id="categoriesList" class="list"></div>
       </div>
 
       <!-- Expenses Tab -->
