@@ -37,6 +37,12 @@
     </header>
 
     <div class="container">
+      <!-- View toggle tabs -->
+      <div class="user-tabs">
+        <button class="utab active" data-utab="dashboard">📊 Dashboard</button>
+        <button class="utab" data-utab="history">📜 History</button>
+      </div>
+
       <!-- ============ DASHBOARD ============ -->
       <div id="dashboardView">
 
@@ -50,9 +56,16 @@
           <p class="balance-sub" id="balanceSub"></p>
         </div>
 
+        <!-- Spending by Category (current month) -->
+        <div class="card-form" id="categoryBreakdownCard">
+          <h2>📊 This Month by Category</h2>
+          <p class="hint">Total expenses this month split by category (where you're involved)</p>
+          <div id="categoryBreakdown" class="list"></div>
+        </div>
+
         <!-- Person-by-person breakdown -->
         <div class="card-form">
-          <h2>📊 Breakdown</h2>
+          <h2>👥 Breakdown</h2>
           <p class="hint">Who owes you and whom you owe</p>
           <div id="breakdownList" class="list"></div>
         </div>
@@ -62,6 +75,25 @@
           <h2>📜 My Recent Expenses</h2>
           <p class="hint">Expenses where you paid</p>
           <div id="recentList" class="list"></div>
+        </div>
+      </div>
+
+      <!-- ============ HISTORY VIEW ============ -->
+      <div id="historyView" class="hidden">
+        <!-- Sub-tabs for history -->
+        <div class="history-subtabs">
+          <button class="utab active" data-htab="expenses">💰 Expenses</button>
+          <button class="utab" data-htab="settlements">💸 Settlements</button>
+        </div>
+
+        <!-- Expense history (grouped by month) -->
+        <div id="historyExpenses">
+          <div id="expensesHistoryList"></div>
+        </div>
+
+        <!-- Settlement history (grouped by month) -->
+        <div id="historySettlements" class="hidden">
+          <div id="settlementsHistoryList"></div>
         </div>
       </div>
 
@@ -88,15 +120,23 @@
             <input type="text" id="description" placeholder="e.g. Groceries, Electricity bill" />
           </div>
 
-          <!-- Step 3: Amount -->
+          <!-- Step 3: Category -->
           <div class="form-group">
-            <label>3️⃣ Total amount (Rs.)</label>
+            <label>3️⃣ Category</label>
+            <select id="categorySelect">
+              <option value="">-- Loading categories... --</option>
+            </select>
+          </div>
+
+          <!-- Step 4: Amount -->
+          <div class="form-group">
+            <label>4️⃣ Total amount (Rs.)</label>
             <input type="number" id="amount" placeholder="e.g. 1000" min="1" step="0.01" />
           </div>
 
-          <!-- Step 4: Who shares -->
+          <!-- Step 5: Who shares -->
           <div class="form-group">
-            <label>4️⃣ Split among these members</label>
+            <label>5️⃣ Split among these members</label>
             <p class="hint-small">You're auto-ticked. Untick if it doesn't include you, or tick others.</p>
             <div id="membersCheckboxes" class="checkbox-grid"></div>
           </div>
