@@ -40,8 +40,11 @@
       <!-- Members Tab -->
       <div id="membersTab" class="tab-content active">
         <h2>Manage Members</h2>
-        <div class="form-row">
-          <input type="text" id="memberName" placeholder="Enter member name" />
+        <p class="hint">Add members with login credentials. They'll use these to log in on the user page.</p>
+        <div class="member-form">
+          <input type="text" id="memberName" placeholder="Full Name (e.g. Kasun Perera)" />
+          <input type="text" id="memberUsername" placeholder="Username (e.g. kasun)" />
+          <input type="text" id="memberPassword" placeholder="Password" />
           <button id="addMemberBtn" class="btn-primary">+ Add Member</button>
         </div>
         <div id="membersList" class="list"></div>
