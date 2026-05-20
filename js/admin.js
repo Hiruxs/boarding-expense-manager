@@ -4,6 +4,7 @@ import {
   addDoc,
   getDocs,
   deleteDoc,
+  updateDoc,
   doc,
   query,
   orderBy,
@@ -68,21 +69,42 @@ document.querySelectorAll('.tab').forEach(tab => {
 // MEMBERS
 // ============================================================
 document.getElementById('addMemberBtn').addEventListener('click', addMember);
-document.getElementById('memberName').addEventListener('keypress', (e) => {
+document.getElementById('memberPassword').addEventListener('keypress', (e) => {
   if (e.key === 'Enter') addMember();
 });
 
 async function addMember() {
   const nameInput = document.getElementById('memberName');
+  const usernameInput = document.getElementById('memberUsername');
+  const passwordInput = document.getElementById('memberPassword');
+
   const name = nameInput.value.trim();
+  const username = usernameInput.value.trim().toLowerCase();
+  const password = passwordInput.value.trim();
+
   if (!name) return alert('Please enter a name');
+  if (!username) return alert('Please enter a username');
+  if (!password) return alert('Please enter a password');
+  if (username.includes(' ')) return alert('Username cannot have spaces');
 
   try {
+    // Check if username already exists
+    const existing = await getDocs(collection(db, 'members'));
+    const duplicate = existing.docs.find(d => (d.data().username || '').toLowerCase() === username);
+    if (duplicate) {
+      return alert(`Username "${username}" is already taken. Please choose another.`);
+    }
+
     await addDoc(collection(db, 'members'), {
       name: name,
+      username: username,
+      password: password,
       createdAt: new Date().toISOString()
     });
+
     nameInput.value = '';
+    usernameInput.value = '';
+    passwordInput.value = '';
     loadMembers();
   } catch (err) {
     alert('Error: ' + err.message);
@@ -103,17 +125,62 @@ async function loadMembers() {
     list.innerHTML = '';
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
+      const hasCredentials = data.username && data.password;
+
       const item = document.createElement('div');
-      item.className = 'list-item';
+      item.className = 'list-item member-item';
       item.innerHTML = `
-        <span class="item-name">👤 ${escapeHtml(data.name)}</span>
-        <button class="btn-danger-sm" data-id="${docSnap.id}">Delete</button>
+        <div class="member-info">
+          <span class="item-name">👤 ${escapeHtml(data.name)}</span>
+          ${hasCredentials
+            ? `<span class="member-creds">@${escapeHtml(data.username)} · 🔑 ${escapeHtml(data.password)}</span>`
+            : `<span class="member-creds no-creds">⚠️ No login credentials</span>`
+          }
+        </div>
+        <div class="member-actions">
+          <button class="btn-secondary-sm btn-edit" data-id="${docSnap.id}">✏️ Edit</button>
+          <button class="btn-danger-sm btn-delete" data-id="${docSnap.id}">🗑 Delete</button>
+        </div>
       `;
-      item.querySelector('button').addEventListener('click', () => deleteMember(docSnap.id, data.name));
+      item.querySelector('.btn-edit').addEventListener('click', () => editMember(docSnap.id, data));
+      item.querySelector('.btn-delete').addEventListener('click', () => deleteMember(docSnap.id, data.name));
       list.appendChild(item);
     });
   } catch (err) {
     list.innerHTML = `<p class="error-msg">Error loading members: ${err.message}</p>`;
+  }
+}
+
+async function editMember(id, current) {
+  const newName = prompt('Full Name:', current.name);
+  if (newName === null) return;
+  if (!newName.trim()) return alert('Name cannot be empty');
+
+  const newUsername = prompt('Username:', current.username || '');
+  if (newUsername === null) return;
+  if (!newUsername.trim()) return alert('Username cannot be empty');
+  if (newUsername.includes(' ')) return alert('Username cannot have spaces');
+
+  const newPassword = prompt('Password:', current.password || '');
+  if (newPassword === null) return;
+  if (!newPassword.trim()) return alert('Password cannot be empty');
+
+  try {
+    // Check username uniqueness (excluding this member)
+    const existing = await getDocs(collection(db, 'members'));
+    const duplicate = existing.docs.find(d =>
+      d.id !== id && (d.data().username || '').toLowerCase() === newUsername.trim().toLowerCase()
+    );
+    if (duplicate) return alert(`Username "${newUsername}" is already taken.`);
+
+    await updateDoc(doc(db, 'members', id), {
+      name: newName.trim(),
+      username: newUsername.trim().toLowerCase(),
+      password: newPassword.trim()
+    });
+    loadMembers();
+  } catch (err) {
+    alert('Error: ' + err.message);
   }
 }
 
