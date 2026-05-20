@@ -62,6 +62,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tabName === 'summary') loadSummary();
     if (tabName === 'members') loadMembers();
     if (tabName === 'history') loadHistory();
+    if (tabName === 'categories') loadCategories();
   });
 });
 
@@ -195,6 +196,128 @@ async function deleteMember(id, name) {
 }
 
 // ============================================================
+// CATEGORIES
+// ============================================================
+
+// Default categories that are auto-created on first load
+const DEFAULT_CATEGORIES = [
+  { name: 'Food', icon: '🍔' },
+  { name: 'Electricity', icon: '⚡' },
+  { name: 'Water', icon: '💧' },
+  { name: 'Internet', icon: '📶' },
+  { name: 'Other', icon: '📦', isDefault: true } // Cannot be deleted
+];
+
+document.getElementById('addCategoryBtn').addEventListener('click', addCategory);
+document.getElementById('categoryName').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') addCategory();
+});
+
+async function ensureDefaultCategories() {
+  const snapshot = await getDocs(collection(db, 'categories'));
+  if (snapshot.empty) {
+    // Seed default categories
+    for (const cat of DEFAULT_CATEGORIES) {
+      await addDoc(collection(db, 'categories'), {
+        name: cat.name,
+        icon: cat.icon,
+        isDefault: cat.isDefault || false,
+        createdAt: new Date().toISOString()
+      });
+    }
+  } else {
+    // Make sure "Other" exists
+    const hasOther = snapshot.docs.find(d => (d.data().name || '').toLowerCase() === 'other');
+    if (!hasOther) {
+      await addDoc(collection(db, 'categories'), {
+        name: 'Other',
+        icon: '📦',
+        isDefault: true,
+        createdAt: new Date().toISOString()
+      });
+    }
+  }
+}
+
+async function addCategory() {
+  const nameInput = document.getElementById('categoryName');
+  const iconInput = document.getElementById('categoryIcon');
+  const name = nameInput.value.trim();
+  const icon = iconInput.value.trim() || '🏷️';
+
+  if (!name) return alert('Please enter a category name');
+
+  try {
+    // Check duplicates (case-insensitive)
+    const existing = await getDocs(collection(db, 'categories'));
+    const duplicate = existing.docs.find(d => (d.data().name || '').toLowerCase() === name.toLowerCase());
+    if (duplicate) return alert(`Category "${name}" already exists.`);
+
+    await addDoc(collection(db, 'categories'), {
+      name: name,
+      icon: icon,
+      isDefault: false,
+      createdAt: new Date().toISOString()
+    });
+    nameInput.value = '';
+    iconInput.value = '';
+    loadCategories();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+async function loadCategories() {
+  const list = document.getElementById('categoriesList');
+  list.innerHTML = '<p class="loading">Loading...</p>';
+
+  try {
+    await ensureDefaultCategories();
+    const snapshot = await getDocs(collection(db, 'categories'));
+
+    list.innerHTML = '';
+    const categories = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        // Other always last
+        if (a.isDefault && a.name === 'Other') return 1;
+        if (b.isDefault && b.name === 'Other') return -1;
+        return a.name.localeCompare(b.name);
+      });
+
+    categories.forEach(cat => {
+      const item = document.createElement('div');
+      item.className = 'list-item category-item';
+      const canDelete = !(cat.isDefault && cat.name === 'Other');
+      item.innerHTML = `
+        <span class="item-name">
+          <span class="cat-icon">${escapeHtml(cat.icon || '🏷️')}</span>
+          <span>${escapeHtml(cat.name)}</span>
+          ${cat.name === 'Other' ? '<span class="default-badge">default</span>' : ''}
+        </span>
+        ${canDelete ? `<button class="btn-danger-sm">Delete</button>` : '<span class="protected-label">🔒 Protected</span>'}
+      `;
+      if (canDelete) {
+        item.querySelector('button').addEventListener('click', () => deleteCategory(cat.id, cat.name));
+      }
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
+}
+
+async function deleteCategory(id, name) {
+  if (!confirm(`Delete category "${name}"?\n\nNote: Expenses using this category will be marked as "Other".`)) return;
+  try {
+    await deleteDoc(doc(db, 'categories', id));
+    loadCategories();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// ============================================================
 // EXPENSES (read-only view for admin)
 // ============================================================
 async function loadExpenses() {
@@ -215,6 +338,9 @@ async function loadExpenses() {
       const e = docSnap.data();
       const date = new Date(e.createdAt).toLocaleString();
       const share = (e.amount / e.sharedWith.length).toFixed(2);
+      const categoryBadge = e.category
+        ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
+        : `<span class="category-badge uncategorized">📦 Uncategorized</span>`;
 
       const item = document.createElement('div');
       item.className = 'expense-card';
@@ -225,6 +351,7 @@ async function loadExpenses() {
         </div>
         <div class="expense-meta">
           <span>💰 Paid by: <strong>${escapeHtml(e.payer)}</strong></span>
+          ${categoryBadge}
           <span>📅 ${date}</span>
         </div>
         <div class="expense-shares">
