@@ -60,6 +60,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tabName === 'expenses') loadExpenses();
     if (tabName === 'summary') loadSummary();
     if (tabName === 'members') loadMembers();
+    if (tabName === 'history') loadHistory();
   });
 });
 
@@ -191,7 +192,8 @@ async function deleteExpense(id, desc) {
 //   - Payer pays full amount
 //   - Amount is split equally among "sharedWith" (payer included if in list)
 //   - Each non-payer in sharedWith owes the payer their share
-//   - Net balance per person = total paid - total share owed
+//   - Settlements (paid debts) SUBTRACT from the debt
+//   - Net balance per person = total paid - total share owed + settlements paid - settlements received
 // ============================================================
 async function loadSummary() {
   const list = document.getElementById('summaryList');
@@ -205,20 +207,22 @@ async function loadSummary() {
     // Get all expenses
     const expensesSnap = await getDocs(collection(db, 'expenses'));
 
+    // Get all settlements (paid debts)
+    const settlementsSnap = await getDocs(collection(db, 'settlements'));
+
     if (expensesSnap.empty) {
       list.innerHTML = '<p class="empty">No expenses yet — nothing to calculate.</p>';
       return;
     }
 
     // Track each person's net balance
-    // Positive = they are owed money (paid more than their share)
-    // Negative = they owe money
     const balance = {};
     memberNames.forEach(n => balance[n] = 0);
 
     // Pair-wise debt tracking: debts[debtor][creditor] = amount
     const debts = {};
 
+    // Process expenses
     expensesSnap.forEach(docSnap => {
       const e = docSnap.data();
       const payer = e.payer;
@@ -226,22 +230,39 @@ async function loadSummary() {
       const shared = e.sharedWith;
       const sharePerPerson = amount / shared.length;
 
-      // Payer paid the full amount
       if (!(payer in balance)) balance[payer] = 0;
       balance[payer] += amount;
 
-      // Each sharer owes their portion
       shared.forEach(person => {
         if (!(person in balance)) balance[person] = 0;
         balance[person] -= sharePerPerson;
 
-        // Track pair debt (if not the payer themselves)
         if (person !== payer) {
           if (!debts[person]) debts[person] = {};
           if (!debts[person][payer]) debts[person][payer] = 0;
           debts[person][payer] += sharePerPerson;
         }
       });
+    });
+
+    // Process settlements (subtract from debts and adjust balance)
+    settlementsSnap.forEach(docSnap => {
+      const s = docSnap.data();
+      const from = s.from; // who paid
+      const to = s.to;     // who received
+      const amount = parseFloat(s.amount);
+
+      // Adjust balance: payer's balance goes up (they paid), receiver's down
+      if (!(from in balance)) balance[from] = 0;
+      if (!(to in balance)) balance[to] = 0;
+      balance[from] += amount;
+      balance[to] -= amount;
+
+      // Reduce debt
+      if (debts[from] && debts[from][to]) {
+        debts[from][to] -= amount;
+        if (debts[from][to] <= 0.01) delete debts[from][to];
+      }
     });
 
     // Render
@@ -257,29 +278,43 @@ async function loadSummary() {
     Object.entries(balance).forEach(([name, bal]) => {
       const isPositive = bal > 0.01;
       const isNegative = bal < -0.01;
-      const status = isPositive ? 'gets back' : isNegative ? 'should pay' : 'settled';
+      const status = isPositive ? 'gets back' : isNegative ? 'should pay' : 'settled ✓';
       const cls = isPositive ? 'positive' : isNegative ? 'negative' : 'neutral';
 
       const row = document.createElement('div');
       row.className = `balance-row ${cls}`;
-      row.innerHTML = `
+
+      // Build row HTML
+      let rowHtml = `
         <span class="bal-name">${escapeHtml(name)}</span>
         <span class="bal-status">${status}</span>
         <span class="bal-amount">Rs. ${Math.abs(bal).toFixed(2)}</span>
       `;
+
+      // Add "Reset" button if person has any debt or credit
+      if (isPositive || isNegative) {
+        rowHtml += `<button class="btn-reset" data-name="${escapeAttr(name)}">Reset to 0</button>`;
+      }
+
+      row.innerHTML = rowHtml;
+
+      const resetBtn = row.querySelector('.btn-reset');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => resetPerson(name, debts, balance));
+      }
+
       balanceList.appendChild(row);
     });
     balanceCard.appendChild(balanceList);
     list.appendChild(balanceCard);
 
-    // Section 2: Who owes whom (simplified)
+    // Section 2: Who owes whom (simplified) with "Mark as Paid" buttons
     const debtCard = document.createElement('div');
     debtCard.className = 'summary-section';
     debtCard.innerHTML = '<h3>🔄 Settlements Needed</h3>';
     const debtList = document.createElement('div');
     debtList.className = 'debt-list';
 
-    // Simplify: net out mutual debts
     const settlements = simplifyDebts(debts);
 
     if (settlements.length === 0) {
@@ -293,7 +328,9 @@ async function loadSummary() {
           <span class="arrow">→ pays →</span>
           <span class="creditor">${escapeHtml(s.to)}</span>
           <span class="debt-amount">Rs. ${s.amount.toFixed(2)}</span>
+          <button class="btn-paid">✓ Mark Paid</button>
         `;
+        row.querySelector('.btn-paid').addEventListener('click', () => markSettlementPaid(s.from, s.to, s.amount));
         debtList.appendChild(row);
       });
     }
@@ -302,6 +339,88 @@ async function loadSummary() {
 
   } catch (err) {
     list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
+}
+
+// ============================================================
+// SETTLEMENT ACTIONS
+// ============================================================
+
+// Mark a single settlement as paid
+async function markSettlementPaid(from, to, amount) {
+  if (!confirm(`Confirm: ${from} paid Rs. ${amount.toFixed(2)} to ${to}?`)) return;
+
+  try {
+    await addDoc(collection(db, 'settlements'), {
+      from: from,
+      to: to,
+      amount: amount,
+      settledAt: new Date().toISOString(),
+      type: 'individual'
+    });
+    alert(`✅ Settlement recorded: ${from} → ${to} Rs. ${amount.toFixed(2)}`);
+    loadSummary();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// Reset all debts for a single person (whole-person reset)
+async function resetPerson(name, debts, balance) {
+  const personBalance = balance[name];
+
+  if (Math.abs(personBalance) < 0.01) {
+    alert(`${name} is already settled.`);
+    return;
+  }
+
+  const action = personBalance < 0 ? 'pays' : 'receives';
+  const totalAmount = Math.abs(personBalance);
+
+  if (!confirm(
+    `Reset all debts for ${name}?\n\n` +
+    `This will record that ${name} ${action} Rs. ${totalAmount.toFixed(2)} (total).\n` +
+    `Balance will become 0.`
+  )) return;
+
+  try {
+    // If person owes money, create settlement entries for each debt they owe
+    if (personBalance < 0 && debts[name]) {
+      for (const creditor in debts[name]) {
+        const amt = debts[name][creditor];
+        if (amt > 0.01) {
+          await addDoc(collection(db, 'settlements'), {
+            from: name,
+            to: creditor,
+            amount: amt,
+            settledAt: new Date().toISOString(),
+            type: 'bulk-reset'
+          });
+        }
+      }
+    }
+    // If person is owed money, create settlement entries from each debtor
+    else if (personBalance > 0) {
+      for (const debtor in debts) {
+        if (debts[debtor][name]) {
+          const amt = debts[debtor][name];
+          if (amt > 0.01) {
+            await addDoc(collection(db, 'settlements'), {
+              from: debtor,
+              to: name,
+              amount: amt,
+              settledAt: new Date().toISOString(),
+              type: 'bulk-reset'
+            });
+          }
+        }
+      }
+    }
+
+    alert(`✅ ${name}'s balance has been reset to 0.`);
+    loadSummary();
+  } catch (err) {
+    alert('Error: ' + err.message);
   }
 }
 
@@ -332,12 +451,72 @@ function simplifyDebts(debts) {
 }
 
 // ============================================================
+// SETTLEMENT HISTORY
+// ============================================================
+async function loadHistory() {
+  const list = document.getElementById('historyList');
+  list.innerHTML = '<p class="loading">Loading...</p>';
+
+  try {
+    const snapshot = await getDocs(collection(db, 'settlements'));
+
+    if (snapshot.empty) {
+      list.innerHTML = '<p class="empty">No settlements recorded yet.</p>';
+      return;
+    }
+
+    // Sort by date descending
+    const settlements = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => new Date(b.settledAt) - new Date(a.settledAt));
+
+    list.innerHTML = '';
+    settlements.forEach(s => {
+      const date = new Date(s.settledAt).toLocaleString();
+      const typeLabel = s.type === 'bulk-reset' ? '🔄 Bulk Reset' : '💸 Individual';
+
+      const item = document.createElement('div');
+      item.className = 'expense-card';
+      item.innerHTML = `
+        <div class="expense-header">
+          <strong>${escapeHtml(s.from)} → ${escapeHtml(s.to)}</strong>
+          <span class="amount">Rs. ${parseFloat(s.amount).toFixed(2)}</span>
+        </div>
+        <div class="expense-meta">
+          <span>${typeLabel}</span>
+          <span>📅 ${date}</span>
+        </div>
+        <button class="btn-danger-sm" data-id="${s.id}">🗑 Undo / Delete</button>
+      `;
+      item.querySelector('button').addEventListener('click', () => deleteSettlement(s.id, s.from, s.to, s.amount));
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
+}
+
+async function deleteSettlement(id, from, to, amount) {
+  if (!confirm(`Undo this settlement?\n\n${from} → ${to} Rs. ${parseFloat(amount).toFixed(2)}\n\nThis will restore the debt in Balance Summary.`)) return;
+  try {
+    await deleteDoc(doc(db, 'settlements', id));
+    loadHistory();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// ============================================================
 // UTILS
 // ============================================================
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function escapeAttr(text) {
+  return String(text).replace(/"/g, '&quot;');
 }
 
 // Boot
