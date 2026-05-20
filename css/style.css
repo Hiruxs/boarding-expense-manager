@@ -822,22 +822,6 @@ body {
 /* ============================================================
    DASHBOARD - Breakdown rows
    ============================================================ */
-.breakdown-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 14px 16px;
-  background: white;
-  border-radius: 10px;
-  border-left: 4px solid #cbd5e0;
-  transition: transform 0.1s;
-}
-
-.breakdown-row:hover {
-  transform: translateX(3px);
-}
-
 .breakdown-row.owe {
   border-left-color: #e53e3e;
   background: #fff5f5;
@@ -846,6 +830,11 @@ body {
 .breakdown-row.owed {
   border-left-color: #38a169;
   background: #f0fff4;
+}
+
+.breakdown-row.waiting {
+  border-left-color: #d69e2e;
+  background: #fffaf0;
 }
 
 .bd-icon {
@@ -868,6 +857,172 @@ body {
 
 .breakdown-row.owed .bd-amount {
   color: #2f855a;
+}
+
+.breakdown-row.waiting .bd-amount {
+  color: #b7791f;
+}
+
+/* Mark as Paid button in breakdown row */
+.btn-mark-paid {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+  border: none;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.btn-mark-paid:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(17, 153, 142, 0.4);
+}
+
+/* Cancel pending payment button */
+.btn-cancel-pay {
+  background: #fed7d7;
+  color: #c53030;
+  border: 1px solid #fc8181;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.btn-cancel-pay:hover {
+  background: #fc8181;
+  color: white;
+}
+
+/* Adjust breakdown row to fit 4 columns when there's a button */
+.breakdown-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  background: white;
+  border-radius: 10px;
+  border-left: 4px solid #cbd5e0;
+  transition: transform 0.1s;
+}
+
+.breakdown-row:hover {
+  transform: translateX(3px);
+}
+
+/* ============================================================
+   PENDING CONFIRMATIONS BANNER (incoming claims)
+   ============================================================ */
+#pendingConfirmations {
+  margin-bottom: 20px;
+}
+
+.pending-title {
+  color: white;
+  margin-bottom: 10px;
+  font-size: 16px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  padding: 10px 16px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.pending-card {
+  background: white;
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+  animation: pulse-attention 2s ease-in-out infinite;
+}
+
+@keyframes pulse-attention {
+  0%, 100% { box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15); }
+  50% { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.35); }
+}
+
+.pending-text {
+  font-size: 15px;
+  color: #2d3748;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.pending-amount {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.pending-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-confirm {
+  flex: 1;
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  min-width: 140px;
+  transition: all 0.2s;
+}
+
+.btn-confirm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
+}
+
+.btn-reject {
+  flex: 1;
+  background: white;
+  color: #c53030;
+  border: 2px solid #fc8181;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  min-width: 100px;
+  transition: all 0.2s;
+}
+
+.btn-reject:hover {
+  background: #fc8181;
+  color: white;
+}
+
+/* Mobile: stack breakdown row better */
+@media (max-width: 600px) {
+  .breakdown-row {
+    grid-template-columns: auto 1fr;
+    gap: 8px 12px;
+  }
+  .breakdown-row .bd-amount,
+  .breakdown-row .btn-mark-paid,
+  .breakdown-row .btn-cancel-pay {
+    grid-column: 2;
+    justify-self: end;
+  }
 }
 
 /* ============================================================
