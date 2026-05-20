@@ -3,6 +3,8 @@ import {
   collection,
   addDoc,
   getDocs,
+  deleteDoc,
+  doc,
   query,
   orderBy
 } from './firebase-config.js';
@@ -139,7 +141,6 @@ async function loadMembers() {
 }
 
 function buildFormFields() {
-  // Payer dropdown
   const payerSelect = document.getElementById('payerSelect');
   payerSelect.innerHTML = '<option value="">-- Select payer --</option>';
   allMembers.forEach(m => {
@@ -150,7 +151,6 @@ function buildFormFields() {
     payerSelect.appendChild(opt);
   });
 
-  // Checkboxes
   const checkboxContainer = document.getElementById('membersCheckboxes');
   checkboxContainer.innerHTML = '';
   allMembers.forEach(m => {
@@ -164,7 +164,6 @@ function buildFormFields() {
     checkboxContainer.appendChild(label);
   });
 
-  // Live preview listeners
   document.getElementById('payerSelect').addEventListener('change', updatePreview);
   document.getElementById('amount').addEventListener('input', updatePreview);
   checkboxContainer.querySelectorAll('input[type="checkbox"]')
@@ -184,7 +183,7 @@ function resetForm() {
 }
 
 // ============================================================
-// DASHBOARD: Calculate balance & breakdown for current user
+// DASHBOARD: Calculate balance & breakdown
 // ============================================================
 async function loadDashboard() {
   const balanceLabel = document.getElementById('balanceLabel');
@@ -192,22 +191,26 @@ async function loadDashboard() {
   const balanceSub = document.getElementById('balanceSub');
   const balanceHero = document.getElementById('balanceHero');
   const breakdownList = document.getElementById('breakdownList');
+  const pendingBox = document.getElementById('pendingConfirmations');
 
   balanceLabel.textContent = 'Loading...';
   balanceAmount.textContent = '';
   balanceSub.textContent = '';
   breakdownList.innerHTML = '<p class="loading">Calculating...</p>';
+  pendingBox.classList.add('hidden');
+  pendingBox.innerHTML = '';
 
   try {
-    const [expensesSnap, settlementsSnap] = await Promise.all([
+    const [expensesSnap, settlementsSnap, pendingSnap] = await Promise.all([
       getDocs(collection(db, 'expenses')),
-      getDocs(collection(db, 'settlements'))
+      getDocs(collection(db, 'settlements')),
+      getDocs(collection(db, 'pendingSettlements'))
     ]);
 
-    // Track pair-wise debts: debts[debtor][creditor] = amount
+    const me = currentUser.name;
     const debts = {};
 
-    // Process expenses
+    // Process expenses → build debts
     expensesSnap.forEach(docSnap => {
       const e = docSnap.data();
       const payer = e.payer;
@@ -225,7 +228,7 @@ async function loadDashboard() {
       });
     });
 
-    // Apply settlements
+    // Apply confirmed settlements
     settlementsSnap.forEach(docSnap => {
       const s = docSnap.data();
       const from = s.from;
@@ -237,17 +240,39 @@ async function loadDashboard() {
       }
     });
 
-    // Simplify mutual debts
-    const userBreakdown = []; // each item: { other, type: 'owes_you'|'you_owe', amount }
-    const processedPairs = new Set();
-    const me = currentUser.name;
+    // Process pending settlements
+    // pendingByDebtor[from][to] = { id, amount } — I claimed I paid this
+    // pendingByCreditor[to][from] = { id, amount } — Someone claims they paid me
+    const pendingByDebtor = {};
+    const pendingByCreditor = {};
 
-    // Get all unique people involved with me
-    const others = new Set();
-    for (const debtor in debts) {
-      if (debtor === me) {
-        Object.keys(debts[debtor]).forEach(c => others.add(c));
+    pendingSnap.forEach(docSnap => {
+      const p = docSnap.data();
+      const id = docSnap.id;
+      const from = p.from;
+      const to = p.to;
+      const amount = parseFloat(p.amount);
+
+      if (!pendingByDebtor[from]) pendingByDebtor[from] = {};
+      pendingByDebtor[from][to] = { id, amount };
+
+      if (!pendingByCreditor[to]) pendingByCreditor[to] = {};
+      pendingByCreditor[to][from] = { id, amount };
+
+      // Pending payments visually reduce the debt
+      if (debts[from] && debts[from][to]) {
+        debts[from][to] -= amount;
+        if (debts[from][to] <= 0.01) delete debts[from][to];
       }
+    });
+
+    // Build breakdown for current user
+    const userBreakdown = [];
+    const processedPairs = new Set();
+    const others = new Set();
+
+    for (const debtor in debts) {
+      if (debtor === me) Object.keys(debts[debtor]).forEach(c => others.add(c));
       for (const creditor in debts[debtor]) {
         if (creditor === me) others.add(debtor);
       }
@@ -270,10 +295,22 @@ async function loadDashboard() {
       }
     });
 
-    // Net total
+    // Add "waiting" entries for MY pending claims (I claimed I paid someone)
+    const myPendingClaims = pendingByDebtor[me] || {};
+    Object.entries(myPendingClaims).forEach(([creditor, info]) => {
+      userBreakdown.push({
+        other: creditor,
+        type: 'waiting',
+        amount: info.amount,
+        pendingId: info.id
+      });
+    });
+
+    // Net total — only count confirmed debts (NOT pending/waiting)
     let netTotal = 0;
     userBreakdown.forEach(b => {
-      netTotal += (b.type === 'owes_you' ? b.amount : -b.amount);
+      if (b.type === 'owes_you') netTotal += b.amount;
+      else if (b.type === 'you_owe') netTotal -= b.amount;
     });
 
     // Render hero card
@@ -295,29 +332,73 @@ async function loadDashboard() {
       balanceSub.textContent = `To ${userBreakdown.filter(b => b.type === 'you_owe').length} people`;
     }
 
-    // Render breakdown
+    // ============ RENDER INCOMING PENDING CONFIRMATIONS ============
+    const incomingPending = pendingByCreditor[me] || {};
+    const incomingEntries = Object.entries(incomingPending);
+
+    if (incomingEntries.length > 0) {
+      pendingBox.classList.remove('hidden');
+      pendingBox.innerHTML = '<h3 class="pending-title">📩 Pending Confirmations</h3>';
+
+      incomingEntries.forEach(([debtor, info]) => {
+        const card = document.createElement('div');
+        card.className = 'pending-card';
+        card.innerHTML = `
+          <div class="pending-text">
+            <strong>${escapeHtml(debtor)}</strong> says they paid you
+            <span class="pending-amount">Rs. ${info.amount.toFixed(2)}</span>
+          </div>
+          <div class="pending-actions">
+            <button class="btn-confirm">✓ Confirm Received</button>
+            <button class="btn-reject">✕ Reject</button>
+          </div>
+        `;
+        card.querySelector('.btn-confirm').addEventListener('click', () =>
+          confirmReceived(info.id, debtor, me, info.amount));
+        card.querySelector('.btn-reject').addEventListener('click', () =>
+          rejectPayment(info.id, debtor, info.amount));
+        pendingBox.appendChild(card);
+      });
+    }
+
+    // ============ RENDER BREAKDOWN ============
     if (userBreakdown.length === 0) {
       breakdownList.innerHTML = '<p class="empty">No pending settlements 🎉</p>';
     } else {
       breakdownList.innerHTML = '';
 
-      // Sort: "you_owe" first (red), then "owes_you" (green)
+      // Sort: waiting first, then you_owe, then owes_you
+      const order = { 'waiting': 0, 'you_owe': 1, 'owes_you': 2 };
       userBreakdown.sort((a, b) => {
-        if (a.type === b.type) return b.amount - a.amount;
-        return a.type === 'you_owe' ? -1 : 1;
+        if (order[a.type] !== order[b.type]) return order[a.type] - order[b.type];
+        return b.amount - a.amount;
       });
 
       userBreakdown.forEach(b => {
         const row = document.createElement('div');
-        row.className = 'breakdown-row ' + (b.type === 'you_owe' ? 'owe' : 'owed');
 
-        if (b.type === 'you_owe') {
+        if (b.type === 'waiting') {
+          row.className = 'breakdown-row waiting';
+          row.innerHTML = `
+            <span class="bd-icon">⏳</span>
+            <span class="bd-text">Waiting for <strong>${escapeHtml(b.other)}</strong> to confirm</span>
+            <span class="bd-amount">Rs. ${b.amount.toFixed(2)}</span>
+            <button class="btn-cancel-pay">Cancel</button>
+          `;
+          row.querySelector('.btn-cancel-pay').addEventListener('click', () =>
+            cancelPendingPayment(b.pendingId, b.other, b.amount));
+        } else if (b.type === 'you_owe') {
+          row.className = 'breakdown-row owe';
           row.innerHTML = `
             <span class="bd-icon">💸</span>
             <span class="bd-text">You owe <strong>${escapeHtml(b.other)}</strong></span>
             <span class="bd-amount">Rs. ${b.amount.toFixed(2)}</span>
+            <button class="btn-mark-paid">✓ Mark as Paid</button>
           `;
+          row.querySelector('.btn-mark-paid').addEventListener('click', () =>
+            markAsPaid(b.other, b.amount));
         } else {
+          row.className = 'breakdown-row owed';
           row.innerHTML = `
             <span class="bd-icon">💰</span>
             <span class="bd-text"><strong>${escapeHtml(b.other)}</strong> owes you</span>
@@ -328,11 +409,94 @@ async function loadDashboard() {
       });
     }
 
-    // Also reload recent expenses
     loadRecent();
 
   } catch (err) {
     breakdownList.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
+}
+
+// ============================================================
+// SETTLEMENT ACTIONS (debtor side)
+// ============================================================
+
+// Debtor clicks "Mark as Paid" → creates pending claim
+async function markAsPaid(creditor, suggestedAmount) {
+  const input = prompt(
+    `You owe ${creditor} Rs. ${suggestedAmount.toFixed(2)}.\n\n` +
+    `Enter the amount you paid (you can adjust if it's a partial payment):`,
+    suggestedAmount.toFixed(2)
+  );
+  if (input === null) return;
+
+  const amount = parseFloat(input);
+  if (isNaN(amount) || amount <= 0) {
+    return alert('Invalid amount');
+  }
+  if (amount > suggestedAmount + 0.01) {
+    if (!confirm(`You're claiming Rs. ${amount.toFixed(2)} but you only owe Rs. ${suggestedAmount.toFixed(2)}.\nContinue anyway?`)) return;
+  }
+
+  try {
+    await addDoc(collection(db, 'pendingSettlements'), {
+      from: currentUser.name,
+      to: creditor,
+      amount: amount,
+      claimedAt: new Date().toISOString(),
+      status: 'pending'
+    });
+    alert(`✅ Marked as paid.\n${creditor} will be asked to confirm receipt of Rs. ${amount.toFixed(2)}.`);
+    loadDashboard();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// Debtor cancels their pending claim
+async function cancelPendingPayment(pendingId, creditor, amount) {
+  if (!confirm(`Cancel your payment claim of Rs. ${amount.toFixed(2)} to ${creditor}?\n\nThe debt will reappear on your dashboard.`)) return;
+  try {
+    await deleteDoc(doc(db, 'pendingSettlements', pendingId));
+    loadDashboard();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// ============================================================
+// SETTLEMENT ACTIONS (creditor side)
+// ============================================================
+
+async function confirmReceived(pendingId, from, to, amount) {
+  if (!confirm(`Confirm: You received Rs. ${amount.toFixed(2)} from ${from}?`)) return;
+
+  try {
+    // 1. Create permanent settlement record
+    await addDoc(collection(db, 'settlements'), {
+      from: from,
+      to: to,
+      amount: amount,
+      settledAt: new Date().toISOString(),
+      type: 'individual',
+      confirmedBy: currentUser.username
+    });
+    // 2. Remove pending claim
+    await deleteDoc(doc(db, 'pendingSettlements', pendingId));
+    alert('✅ Payment confirmed and recorded!');
+    loadDashboard();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+async function rejectPayment(pendingId, from, amount) {
+  if (!confirm(`Reject ${from}'s claim of Rs. ${amount.toFixed(2)}?\n\nThe debt will reappear on their dashboard.`)) return;
+  try {
+    await deleteDoc(doc(db, 'pendingSettlements', pendingId));
+    alert(`❌ Payment claim rejected. ${from} will see the debt again.`);
+    loadDashboard();
+  } catch (err) {
+    alert('Error: ' + err.message);
   }
 }
 
@@ -427,12 +591,7 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
     });
 
     showMsg('✅ Expense saved! Returning to dashboard...', 'success');
-
-    // Auto-return to dashboard after 1 second
-    setTimeout(() => {
-      showDashboard();
-    }, 1000);
-
+    setTimeout(() => showDashboard(), 1000);
   } catch (err) {
     showMsg('Error: ' + err.message, 'error');
   } finally {
