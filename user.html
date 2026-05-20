@@ -3,61 +3,86 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Add Expense - Boarding Expense Manager</title>
+  <title>User - Boarding Expense Manager</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <h1>👥 Add Expense Slot</h1>
-    <a href="index.html" class="btn-secondary">🏠 Home</a>
-  </header>
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal-overlay">
+    <div class="modal">
+      <h2>🔑 User Login</h2>
+      <input type="text" id="userUsername" placeholder="Username" autocomplete="username" />
+      <input type="password" id="userPassword" placeholder="Password" autocomplete="current-password" />
 
-  <div class="container">
-    <div class="card-form">
-      <h2>New Expense</h2>
+      <label class="stay-signed-in">
+        <input type="checkbox" id="staySignedIn" />
+        <span>Stay signed in</span>
+      </label>
 
-      <!-- Step 1: Who paid -->
-      <div class="form-group">
-        <label>1️⃣ Who paid?</label>
-        <select id="payerSelect">
-          <option value="">-- Select payer --</option>
-        </select>
-      </div>
-
-      <!-- Step 2: Description -->
-      <div class="form-group">
-        <label>2️⃣ What was it for?</label>
-        <input type="text" id="description" placeholder="e.g. Groceries, Electricity bill" />
-      </div>
-
-      <!-- Step 3: Amount -->
-      <div class="form-group">
-        <label>3️⃣ Total amount (Rs.)</label>
-        <input type="number" id="amount" placeholder="e.g. 1000" min="1" step="0.01" />
-      </div>
-
-      <!-- Step 4: Who shares -->
-      <div class="form-group">
-        <label>4️⃣ Split among these members (including yourself if applicable)</label>
-        <p class="hint">Tick everyone the money was spent on</p>
-        <div id="membersCheckboxes" class="checkbox-grid"></div>
-      </div>
-
-      <!-- Live preview -->
-      <div id="preview" class="preview hidden">
-        <h3>💡 Split Preview</h3>
-        <div id="previewContent"></div>
-      </div>
-
-      <!-- Submit -->
-      <button id="submitBtn" class="btn-primary btn-large">💾 Save Expense</button>
-      <p id="message" class="message"></p>
+      <button id="userLoginBtn" class="btn-primary">Login</button>
+      <a href="index.html" class="link-back">← Back to Home</a>
+      <p id="userLoginError" class="error-msg"></p>
     </div>
+  </div>
 
-    <!-- My recent submissions -->
-    <div class="card-form">
-      <h2>📜 Recent Expenses</h2>
-      <div id="recentList" class="list"></div>
+  <!-- Main App -->
+  <div id="userApp" class="hidden">
+    <header class="topbar">
+      <h1>👥 <span id="welcomeName">User</span></h1>
+      <div class="topbar-actions">
+        <a href="index.html" class="btn-secondary">🏠 Home</a>
+        <button id="userLogoutBtn" class="btn-secondary">Logout</button>
+      </div>
+    </header>
+
+    <div class="container">
+      <div class="card-form">
+        <h2>Add New Expense</h2>
+
+        <!-- Step 1: Who paid -->
+        <div class="form-group">
+          <label>1️⃣ Who paid?</label>
+          <select id="payerSelect">
+            <option value="">-- Select payer --</option>
+          </select>
+          <p class="hint-small">Auto-filled to you. Change if someone else paid.</p>
+        </div>
+
+        <!-- Step 2: Description -->
+        <div class="form-group">
+          <label>2️⃣ What was it for?</label>
+          <input type="text" id="description" placeholder="e.g. Groceries, Electricity bill" />
+        </div>
+
+        <!-- Step 3: Amount -->
+        <div class="form-group">
+          <label>3️⃣ Total amount (Rs.)</label>
+          <input type="number" id="amount" placeholder="e.g. 1000" min="1" step="0.01" />
+        </div>
+
+        <!-- Step 4: Who shares -->
+        <div class="form-group">
+          <label>4️⃣ Split among these members</label>
+          <p class="hint-small">You're auto-ticked. Untick if it doesn't include you, or tick others.</p>
+          <div id="membersCheckboxes" class="checkbox-grid"></div>
+        </div>
+
+        <!-- Live preview -->
+        <div id="preview" class="preview hidden">
+          <h3>💡 Split Preview</h3>
+          <div id="previewContent"></div>
+        </div>
+
+        <button id="submitBtn" class="btn-primary btn-large">💾 Save Expense</button>
+        <p id="message" class="message"></p>
+      </div>
+
+      <!-- My recent submissions -->
+      <div class="card-form">
+        <h2>📜 My Recent Expenses</h2>
+        <p class="hint">Expenses where you paid</p>
+        <div id="recentList" class="list"></div>
+      </div>
     </div>
   </div>
 
