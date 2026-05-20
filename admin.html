@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard - Boarding Expense Manager</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Login Modal -->
+  <div id="loginModal" class="modal-overlay">
+    <div class="modal">
+      <h2>🔒 Admin Login</h2>
+      <input type="password" id="adminPassword" placeholder="Enter admin password" />
+      <button id="loginBtn" class="btn-primary">Login</button>
+      <a href="index.html" class="link-back">← Back to Home</a>
+      <p id="loginError" class="error-msg"></p>
+    </div>
+  </div>
+
+  <!-- Main Dashboard -->
+  <div id="dashboard" class="dashboard hidden">
+    <header class="topbar">
+      <h1>👤 Admin Dashboard</h1>
+      <div class="topbar-actions">
+        <a href="index.html" class="btn-secondary">🏠 Home</a>
+        <button id="logoutBtn" class="btn-secondary">Logout</button>
+      </div>
+    </header>
+
+    <div class="container">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="members">Members</button>
+        <button class="tab" data-tab="expenses">All Expenses</button>
+        <button class="tab" data-tab="summary">Balance Summary</button>
+      </div>
+
+      <!-- Members Tab -->
+      <div id="membersTab" class="tab-content active">
+        <h2>Manage Members</h2>
+        <div class="form-row">
+          <input type="text" id="memberName" placeholder="Enter member name" />
+          <button id="addMemberBtn" class="btn-primary">+ Add Member</button>
+        </div>
+        <div id="membersList" class="list"></div>
+      </div>
+
+      <!-- Expenses Tab -->
+      <div id="expensesTab" class="tab-content">
+        <h2>All Expense Slots</h2>
+        <p class="hint">Every slot added by users appears here</p>
+        <div id="expensesList" class="list"></div>
+      </div>
+
+      <!-- Summary Tab -->
+      <div id="summaryTab" class="tab-content">
+        <h2>Balance Summary</h2>
+        <p class="hint">Who has paid more vs who owes money</p>
+        <div id="summaryList" class="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>
