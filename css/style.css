@@ -320,6 +320,106 @@ body {
   border-color: #667eea;
 }
 
+/* Member add form (3 inputs + button) */
+.member-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.member-form input {
+  padding: 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.member-form input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+@media (max-width: 700px) {
+  .member-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Member list item layout */
+.member-item {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.member-creds {
+  font-size: 13px;
+  color: #718096;
+  font-family: 'Courier New', monospace;
+}
+
+.member-creds.no-creds {
+  color: #e53e3e;
+  font-family: inherit;
+}
+
+.member-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-secondary-sm {
+  background: #e0e7ff;
+  color: #4338ca;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-secondary-sm:hover {
+  background: #c7d2fe;
+}
+
+/* Stay signed in checkbox */
+.stay-signed-in {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 15px 0;
+  cursor: pointer;
+  font-size: 14px;
+  color: #4a5568;
+  user-select: none;
+}
+
+.stay-signed-in input {
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  cursor: pointer;
+}
+
+/* Small hint below form labels */
+.hint-small {
+  font-size: 12px;
+  color: #a0aec0;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
 .card-form {
   background: white;
   padding: 25px;
