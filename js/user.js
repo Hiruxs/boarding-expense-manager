@@ -10,6 +10,7 @@ import {
 } from './firebase-config.js';
 
 let allMembers = [];
+let allCategories = [];
 let currentUser = null; // { name, username }
 
 // ============================================================
@@ -35,6 +36,7 @@ function showApp() {
   document.getElementById('userApp').classList.remove('hidden');
   document.getElementById('welcomeName').textContent = currentUser.name;
   loadMembers();
+  loadCategories();
   loadDashboard();
 }
 
@@ -170,10 +172,54 @@ function buildFormFields() {
     .forEach(cb => cb.addEventListener('change', updatePreview));
 }
 
+// ============================================================
+// LOAD CATEGORIES (populate dropdown)
+// ============================================================
+async function loadCategories() {
+  try {
+    const snapshot = await getDocs(collection(db, 'categories'));
+    allCategories = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        // "Other" always last
+        if (a.name === 'Other') return 1;
+        if (b.name === 'Other') return -1;
+        return a.name.localeCompare(b.name);
+      });
+
+    // If no categories exist yet, fall back to "Other" only
+    if (allCategories.length === 0) {
+      allCategories = [{ id: 'fallback', name: 'Other', icon: '📦' }];
+    }
+
+    const select = document.getElementById('categorySelect');
+    select.innerHTML = '';
+    allCategories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.name;
+      opt.dataset.icon = cat.icon || '🏷️';
+      opt.textContent = `${cat.icon || '🏷️'}  ${cat.name}`;
+      if (cat.name === 'Other') opt.selected = true; // Default
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error('Failed to load categories:', err);
+  }
+}
+
+function getCategoryIcon(name) {
+  const cat = allCategories.find(c => c.name === name);
+  return cat ? (cat.icon || '🏷️') : '📦';
+}
+
 function resetForm() {
   document.getElementById('description').value = '';
   document.getElementById('amount').value = '';
   document.getElementById('payerSelect').value = currentUser.name;
+  // Reset category to "Other" (default)
+  const catSelect = document.getElementById('categorySelect');
+  const otherOption = Array.from(catSelect.options).find(o => o.value === 'Other');
+  if (otherOption) catSelect.value = 'Other';
   document.querySelectorAll('#membersCheckboxes input[type="checkbox"]').forEach(cb => {
     cb.checked = (cb.value === currentUser.name);
   });
@@ -410,6 +456,7 @@ async function loadDashboard() {
     }
 
     loadRecent();
+    loadCategoryBreakdown();
 
   } catch (err) {
     breakdownList.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
@@ -571,9 +618,12 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
   const description = document.getElementById('description').value.trim();
   const amount = parseFloat(document.getElementById('amount').value);
   const sharedWith = getSelectedMembers();
+  const category = document.getElementById('categorySelect').value || 'Other';
+  const categoryIcon = getCategoryIcon(category);
 
   if (!payer) return showMsg('Please select who paid', 'error');
   if (!description) return showMsg('Please enter a description', 'error');
+  if (!category) return showMsg('Please select a category', 'error');
   if (!amount || amount <= 0) return showMsg('Please enter a valid amount', 'error');
   if (sharedWith.length === 0) return showMsg('Please tick at least one member to split with', 'error');
 
@@ -586,6 +636,8 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
       description: description,
       amount: amount,
       sharedWith: sharedWith,
+      category: category,
+      categoryIcon: categoryIcon,
       addedBy: currentUser.username,
       createdAt: new Date().toISOString()
     });
@@ -630,6 +682,9 @@ async function loadRecent() {
       const e = docSnap.data();
       const date = new Date(e.createdAt).toLocaleString();
       const share = (e.amount / e.sharedWith.length).toFixed(2);
+      const categoryBadge = e.category
+        ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
+        : `<span class="category-badge uncategorized">📦 Uncategorized</span>`;
 
       const item = document.createElement('div');
       item.className = 'expense-card';
@@ -639,6 +694,7 @@ async function loadRecent() {
           <span class="amount">Rs. ${e.amount.toFixed(2)}</span>
         </div>
         <div class="expense-meta">
+          ${categoryBadge}
           <span>📅 ${date}</span>
         </div>
         <div class="expense-shares">
@@ -663,6 +719,293 @@ function escapeHtml(text) {
 
 function escapeAttr(text) {
   return String(text).replace(/"/g, '&quot;');
+}
+
+// ============================================================
+// CATEGORY BREAKDOWN (current month, where current user is involved)
+// ============================================================
+async function loadCategoryBreakdown() {
+  const list = document.getElementById('categoryBreakdown');
+  list.innerHTML = '<p class="loading">Loading...</p>';
+
+  try {
+    const snapshot = await getDocs(collection(db, 'expenses'));
+    const now = new Date();
+    const currentMonth = now.getFullYear() + '-' + (now.getMonth() + 1);
+
+    // Filter: current month + user is involved (payer or in sharedWith)
+    const me = currentUser.name;
+    const myExpensesThisMonth = snapshot.docs
+      .map(d => d.data())
+      .filter(e => {
+        const date = new Date(e.createdAt);
+        const expenseMonth = date.getFullYear() + '-' + (date.getMonth() + 1);
+        const isMyMonth = expenseMonth === currentMonth;
+        const isInvolved = e.payer === me || (e.sharedWith || []).includes(me);
+        return isMyMonth && isInvolved;
+      });
+
+    if (myExpensesThisMonth.length === 0) {
+      list.innerHTML = '<p class="empty">No expenses for you this month yet.</p>';
+      return;
+    }
+
+    // Group by category and compute MY share for each
+    const byCategory = {};
+    let totalMyShare = 0;
+
+    myExpensesThisMonth.forEach(e => {
+      const cat = e.category || 'Uncategorized';
+      const icon = e.categoryIcon || '📦';
+      const shared = e.sharedWith || [];
+      const myShare = shared.includes(me) ? (parseFloat(e.amount) / shared.length) : 0;
+
+      if (!byCategory[cat]) byCategory[cat] = { icon, total: 0, count: 0 };
+      byCategory[cat].total += myShare;
+      byCategory[cat].count += 1;
+      totalMyShare += myShare;
+    });
+
+    // Sort by total descending
+    const sorted = Object.entries(byCategory).sort((a, b) => b[1].total - a[1].total);
+
+    list.innerHTML = '';
+    sorted.forEach(([cat, info]) => {
+      const percent = totalMyShare > 0 ? (info.total / totalMyShare * 100) : 0;
+
+      const row = document.createElement('div');
+      row.className = 'cat-bar-row';
+      row.innerHTML = `
+        <div class="cat-bar-header">
+          <span class="cat-bar-name">${escapeHtml(info.icon)} ${escapeHtml(cat)}</span>
+          <span class="cat-bar-amount">Rs. ${info.total.toFixed(2)}</span>
+        </div>
+        <div class="cat-bar-track">
+          <div class="cat-bar-fill" style="width: ${percent.toFixed(1)}%"></div>
+        </div>
+        <div class="cat-bar-meta">${info.count} expense${info.count > 1 ? 's' : ''} · ${percent.toFixed(1)}%</div>
+      `;
+      list.appendChild(row);
+    });
+
+    // Total at top
+    const totalRow = document.createElement('div');
+    totalRow.className = 'cat-total';
+    totalRow.innerHTML = `
+      <span>Your share this month</span>
+      <strong>Rs. ${totalMyShare.toFixed(2)}</strong>
+    `;
+    list.insertBefore(totalRow, list.firstChild);
+
+  } catch (err) {
+    list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
+}
+
+// ============================================================
+// VIEW TAB SWITCHING (Dashboard <-> History)
+// ============================================================
+document.querySelectorAll('.user-tabs .utab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.utab;
+    document.querySelectorAll('.user-tabs .utab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    if (target === 'dashboard') {
+      document.getElementById('dashboardView').classList.remove('hidden');
+      document.getElementById('historyView').classList.add('hidden');
+      loadDashboard();
+    } else {
+      document.getElementById('dashboardView').classList.add('hidden');
+      document.getElementById('historyView').classList.remove('hidden');
+      loadHistoryExpenses();
+    }
+  });
+});
+
+// History sub-tabs (Expenses / Settlements)
+document.querySelectorAll('.history-subtabs .utab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.htab;
+    document.querySelectorAll('.history-subtabs .utab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    if (target === 'expenses') {
+      document.getElementById('historyExpenses').classList.remove('hidden');
+      document.getElementById('historySettlements').classList.add('hidden');
+      loadHistoryExpenses();
+    } else {
+      document.getElementById('historyExpenses').classList.add('hidden');
+      document.getElementById('historySettlements').classList.remove('hidden');
+      loadHistorySettlements();
+    }
+  });
+});
+
+// ============================================================
+// HISTORY: EXPENSES grouped by month (where user is involved)
+// ============================================================
+async function loadHistoryExpenses() {
+  const list = document.getElementById('expensesHistoryList');
+  list.innerHTML = '<p class="loading">Loading...</p>';
+
+  try {
+    const snapshot = await getDocs(collection(db, 'expenses'));
+    const me = currentUser.name;
+
+    const myExpenses = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(e => e.payer === me || (e.sharedWith || []).includes(me))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (myExpenses.length === 0) {
+      list.innerHTML = '<p class="empty">No expense history yet.</p>';
+      return;
+    }
+
+    // Group by month
+    const groups = {};
+    myExpenses.forEach(e => {
+      const d = new Date(e.createdAt);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+      if (!groups[key]) groups[key] = { label, items: [] };
+      groups[key].items.push(e);
+    });
+
+    list.innerHTML = '';
+    Object.keys(groups).sort().reverse().forEach(monthKey => {
+      const group = groups[monthKey];
+
+      // Total spent by user this month (their share)
+      let myMonthShare = 0;
+      group.items.forEach(e => {
+        const shared = e.sharedWith || [];
+        if (shared.includes(me)) {
+          myMonthShare += parseFloat(e.amount) / shared.length;
+        }
+      });
+
+      const section = document.createElement('div');
+      section.className = 'month-section';
+      section.innerHTML = `
+        <div class="month-header">
+          <h3>${group.label}</h3>
+          <span class="month-total">Your share: Rs. ${myMonthShare.toFixed(2)}</span>
+        </div>
+      `;
+
+      group.items.forEach(e => {
+        const date = new Date(e.createdAt).toLocaleDateString();
+        const shared = e.sharedWith || [];
+        const share = parseFloat(e.amount) / shared.length;
+        const isPayer = e.payer === me;
+        const categoryBadge = e.category
+          ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
+          : `<span class="category-badge uncategorized">📦 Uncategorized</span>`;
+
+        const card = document.createElement('div');
+        card.className = 'expense-card history-expense';
+        card.innerHTML = `
+          <div class="expense-header">
+            <strong>${escapeHtml(e.description)}</strong>
+            <span class="amount">Rs. ${parseFloat(e.amount).toFixed(2)}</span>
+          </div>
+          <div class="expense-meta">
+            ${categoryBadge}
+            <span>${isPayer ? '💰 You paid' : '👥 Paid by ' + escapeHtml(e.payer)}</span>
+            <span>📅 ${date}</span>
+          </div>
+          <div class="expense-shares">
+            <span class="shares-label">Your share: <strong>Rs. ${share.toFixed(2)}</strong> (split among ${shared.length})</span>
+          </div>
+        `;
+        section.appendChild(card);
+      });
+
+      list.appendChild(section);
+    });
+  } catch (err) {
+    list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
+}
+
+// ============================================================
+// HISTORY: SETTLEMENTS grouped by month (where user is involved)
+// ============================================================
+async function loadHistorySettlements() {
+  const list = document.getElementById('settlementsHistoryList');
+  list.innerHTML = '<p class="loading">Loading...</p>';
+
+  try {
+    const snapshot = await getDocs(collection(db, 'settlements'));
+    const me = currentUser.name;
+
+    const mySettlements = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(s => s.from === me || s.to === me)
+      .sort((a, b) => new Date(b.settledAt) - new Date(a.settledAt));
+
+    if (mySettlements.length === 0) {
+      list.innerHTML = '<p class="empty">No settlements yet.</p>';
+      return;
+    }
+
+    const groups = {};
+    mySettlements.forEach(s => {
+      const d = new Date(s.settledAt);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+      if (!groups[key]) groups[key] = { label, items: [] };
+      groups[key].items.push(s);
+    });
+
+    list.innerHTML = '';
+    Object.keys(groups).sort().reverse().forEach(monthKey => {
+      const group = groups[monthKey];
+
+      let paidOut = 0;
+      let receivedIn = 0;
+      group.items.forEach(s => {
+        if (s.from === me) paidOut += parseFloat(s.amount);
+        else receivedIn += parseFloat(s.amount);
+      });
+
+      const section = document.createElement('div');
+      section.className = 'month-section';
+      section.innerHTML = `
+        <div class="month-header">
+          <h3>${group.label}</h3>
+          <span class="month-total">
+            <span class="settle-out">-Rs. ${paidOut.toFixed(2)}</span>
+            ·
+            <span class="settle-in">+Rs. ${receivedIn.toFixed(2)}</span>
+          </span>
+        </div>
+      `;
+
+      group.items.forEach(s => {
+        const date = new Date(s.settledAt).toLocaleDateString();
+        const iPaid = s.from === me;
+
+        const card = document.createElement('div');
+        card.className = 'settlement-card ' + (iPaid ? 'paid-out' : 'received-in');
+        card.innerHTML = `
+          <span class="set-icon">${iPaid ? '💸' : '💰'}</span>
+          <div class="set-text">
+            <strong>${iPaid ? 'You paid ' + escapeHtml(s.to) : escapeHtml(s.from) + ' paid you'}</strong>
+            <span class="set-date">📅 ${date}</span>
+          </div>
+          <span class="set-amount ${iPaid ? 'out' : 'in'}">${iPaid ? '-' : '+'}Rs. ${parseFloat(s.amount).toFixed(2)}</span>
+        `;
+        section.appendChild(card);
+      });
+
+      list.appendChild(section);
+    });
+  } catch (err) {
+    list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
 }
 
 // Boot
