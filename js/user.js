@@ -13,8 +13,6 @@ let currentUser = null; // { name, username }
 // ============================================================
 // AUTHENTICATION
 // ============================================================
-
-// Check if user is already logged in (localStorage = stay signed in, sessionStorage = temporary)
 function checkAuth() {
   const stored = localStorage.getItem('boardingUser') || sessionStorage.getItem('boardingUser');
   if (stored) {
@@ -23,7 +21,6 @@ function checkAuth() {
       showApp();
       return true;
     } catch (e) {
-      // Invalid stored data, clear and ask to login again
       localStorage.removeItem('boardingUser');
       sessionStorage.removeItem('boardingUser');
     }
@@ -36,7 +33,7 @@ function showApp() {
   document.getElementById('userApp').classList.remove('hidden');
   document.getElementById('welcomeName').textContent = currentUser.name;
   loadMembers();
-  loadRecent();
+  loadDashboard();
 }
 
 document.getElementById('userLoginBtn').addEventListener('click', login);
@@ -73,12 +70,8 @@ async function login() {
     }
 
     const data = member.data();
-    currentUser = {
-      name: data.name,
-      username: data.username
-    };
+    currentUser = { name: data.name, username: data.username };
 
-    // Save based on "stay signed in"
     if (stayLogged) {
       localStorage.setItem('boardingUser', JSON.stringify(currentUser));
     } else {
@@ -99,7 +92,28 @@ document.getElementById('userLogoutBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-// LOAD MEMBERS (populate dropdown and checkboxes)
+// VIEW TOGGLE (Dashboard <-> Form)
+// ============================================================
+document.getElementById('openFormBtn').addEventListener('click', () => {
+  document.getElementById('dashboardView').classList.add('hidden');
+  document.getElementById('formView').classList.remove('hidden');
+  resetForm();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+document.getElementById('closeFormBtn').addEventListener('click', () => {
+  showDashboard();
+});
+
+function showDashboard() {
+  document.getElementById('formView').classList.add('hidden');
+  document.getElementById('dashboardView').classList.remove('hidden');
+  loadDashboard();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ============================================================
+// LOAD MEMBERS
 // ============================================================
 async function loadMembers() {
   try {
@@ -107,51 +121,218 @@ async function loadMembers() {
     allMembers = snapshot.docs.map(d => ({ id: d.id, name: d.data().name }));
 
     if (allMembers.length === 0) {
-      document.querySelector('.card-form').innerHTML = `
-        <h2>⚠️ No members yet</h2>
-        <p>Ask the admin to add members first.</p>
-        <a href="index.html" class="btn-primary">Back to Home</a>
+      document.getElementById('dashboardView').innerHTML = `
+        <div class="card-form">
+          <h2>⚠️ No members yet</h2>
+          <p>Ask the admin to add members first.</p>
+          <a href="index.html" class="btn-primary">Back to Home</a>
+        </div>
       `;
+      document.getElementById('openFormBtn').style.display = 'none';
       return;
     }
 
-    // Populate payer dropdown
-    const payerSelect = document.getElementById('payerSelect');
-    payerSelect.innerHTML = '<option value="">-- Select payer --</option>';
-    allMembers.forEach(m => {
-      const opt = document.createElement('option');
-      opt.value = m.name;
-      opt.textContent = m.name;
-      if (m.name === currentUser.name) {
-        opt.selected = true; // ✅ Auto-select current user as payer
-      }
-      payerSelect.appendChild(opt);
-    });
-
-    // Populate checkboxes
-    const checkboxContainer = document.getElementById('membersCheckboxes');
-    checkboxContainer.innerHTML = '';
-    allMembers.forEach(m => {
-      const label = document.createElement('label');
-      label.className = 'checkbox-label';
-      const isCurrentUser = m.name === currentUser.name;
-      label.innerHTML = `
-        <input type="checkbox" value="${escapeAttr(m.name)}" ${isCurrentUser ? 'checked' : ''} />
-        <span>${escapeHtml(m.name)}${isCurrentUser ? ' (you)' : ''}</span>
-      `;
-      checkboxContainer.appendChild(label);
-    });
-
-    // Wire up live preview listeners
-    document.getElementById('payerSelect').addEventListener('change', updatePreview);
-    document.getElementById('amount').addEventListener('input', updatePreview);
-    checkboxContainer.querySelectorAll('input[type="checkbox"]')
-      .forEach(cb => cb.addEventListener('change', updatePreview));
-
-    updatePreview(); // Show preview if form is already partially valid
-
+    buildFormFields();
   } catch (err) {
     alert('Error loading members: ' + err.message);
+  }
+}
+
+function buildFormFields() {
+  // Payer dropdown
+  const payerSelect = document.getElementById('payerSelect');
+  payerSelect.innerHTML = '<option value="">-- Select payer --</option>';
+  allMembers.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.name;
+    opt.textContent = m.name;
+    if (m.name === currentUser.name) opt.selected = true;
+    payerSelect.appendChild(opt);
+  });
+
+  // Checkboxes
+  const checkboxContainer = document.getElementById('membersCheckboxes');
+  checkboxContainer.innerHTML = '';
+  allMembers.forEach(m => {
+    const label = document.createElement('label');
+    label.className = 'checkbox-label';
+    const isCurrentUser = m.name === currentUser.name;
+    label.innerHTML = `
+      <input type="checkbox" value="${escapeAttr(m.name)}" ${isCurrentUser ? 'checked' : ''} />
+      <span>${escapeHtml(m.name)}${isCurrentUser ? ' (you)' : ''}</span>
+    `;
+    checkboxContainer.appendChild(label);
+  });
+
+  // Live preview listeners
+  document.getElementById('payerSelect').addEventListener('change', updatePreview);
+  document.getElementById('amount').addEventListener('input', updatePreview);
+  checkboxContainer.querySelectorAll('input[type="checkbox"]')
+    .forEach(cb => cb.addEventListener('change', updatePreview));
+}
+
+function resetForm() {
+  document.getElementById('description').value = '';
+  document.getElementById('amount').value = '';
+  document.getElementById('payerSelect').value = currentUser.name;
+  document.querySelectorAll('#membersCheckboxes input[type="checkbox"]').forEach(cb => {
+    cb.checked = (cb.value === currentUser.name);
+  });
+  document.getElementById('preview').classList.add('hidden');
+  document.getElementById('message').textContent = '';
+  document.getElementById('message').className = 'message';
+}
+
+// ============================================================
+// DASHBOARD: Calculate balance & breakdown for current user
+// ============================================================
+async function loadDashboard() {
+  const balanceLabel = document.getElementById('balanceLabel');
+  const balanceAmount = document.getElementById('balanceAmount');
+  const balanceSub = document.getElementById('balanceSub');
+  const balanceHero = document.getElementById('balanceHero');
+  const breakdownList = document.getElementById('breakdownList');
+
+  balanceLabel.textContent = 'Loading...';
+  balanceAmount.textContent = '';
+  balanceSub.textContent = '';
+  breakdownList.innerHTML = '<p class="loading">Calculating...</p>';
+
+  try {
+    const [expensesSnap, settlementsSnap] = await Promise.all([
+      getDocs(collection(db, 'expenses')),
+      getDocs(collection(db, 'settlements'))
+    ]);
+
+    // Track pair-wise debts: debts[debtor][creditor] = amount
+    const debts = {};
+
+    // Process expenses
+    expensesSnap.forEach(docSnap => {
+      const e = docSnap.data();
+      const payer = e.payer;
+      const amount = parseFloat(e.amount);
+      const shared = e.sharedWith || [];
+      if (shared.length === 0) return;
+      const sharePerPerson = amount / shared.length;
+
+      shared.forEach(person => {
+        if (person !== payer) {
+          if (!debts[person]) debts[person] = {};
+          if (!debts[person][payer]) debts[person][payer] = 0;
+          debts[person][payer] += sharePerPerson;
+        }
+      });
+    });
+
+    // Apply settlements
+    settlementsSnap.forEach(docSnap => {
+      const s = docSnap.data();
+      const from = s.from;
+      const to = s.to;
+      const amount = parseFloat(s.amount);
+      if (debts[from] && debts[from][to]) {
+        debts[from][to] -= amount;
+        if (debts[from][to] <= 0.01) delete debts[from][to];
+      }
+    });
+
+    // Simplify mutual debts
+    const userBreakdown = []; // each item: { other, type: 'owes_you'|'you_owe', amount }
+    const processedPairs = new Set();
+    const me = currentUser.name;
+
+    // Get all unique people involved with me
+    const others = new Set();
+    for (const debtor in debts) {
+      if (debtor === me) {
+        Object.keys(debts[debtor]).forEach(c => others.add(c));
+      }
+      for (const creditor in debts[debtor]) {
+        if (creditor === me) others.add(debtor);
+      }
+    }
+
+    others.forEach(other => {
+      const key = [me, other].sort().join('|');
+      if (processedPairs.has(key)) return;
+      processedPairs.add(key);
+
+      const iOwe = (debts[me] && debts[me][other]) || 0;
+      const owesMe = (debts[other] && debts[other][me]) || 0;
+      const net = owesMe - iOwe;
+
+      if (Math.abs(net) < 0.01) return;
+      if (net > 0) {
+        userBreakdown.push({ other, type: 'owes_you', amount: net });
+      } else {
+        userBreakdown.push({ other, type: 'you_owe', amount: -net });
+      }
+    });
+
+    // Net total
+    let netTotal = 0;
+    userBreakdown.forEach(b => {
+      netTotal += (b.type === 'owes_you' ? b.amount : -b.amount);
+    });
+
+    // Render hero card
+    balanceHero.className = 'balance-hero';
+    if (Math.abs(netTotal) < 0.01) {
+      balanceHero.classList.add('settled');
+      balanceLabel.textContent = '🎉 All Settled!';
+      balanceAmount.textContent = 'Rs. 0.00';
+      balanceSub.textContent = 'You don\'t owe anyone, and no one owes you.';
+    } else if (netTotal > 0) {
+      balanceHero.classList.add('positive');
+      balanceLabel.textContent = '💚 You should get back';
+      balanceAmount.textContent = `Rs. ${netTotal.toFixed(2)}`;
+      balanceSub.textContent = `From ${userBreakdown.filter(b => b.type === 'owes_you').length} people`;
+    } else {
+      balanceHero.classList.add('negative');
+      balanceLabel.textContent = '💸 You should pay';
+      balanceAmount.textContent = `Rs. ${Math.abs(netTotal).toFixed(2)}`;
+      balanceSub.textContent = `To ${userBreakdown.filter(b => b.type === 'you_owe').length} people`;
+    }
+
+    // Render breakdown
+    if (userBreakdown.length === 0) {
+      breakdownList.innerHTML = '<p class="empty">No pending settlements 🎉</p>';
+    } else {
+      breakdownList.innerHTML = '';
+
+      // Sort: "you_owe" first (red), then "owes_you" (green)
+      userBreakdown.sort((a, b) => {
+        if (a.type === b.type) return b.amount - a.amount;
+        return a.type === 'you_owe' ? -1 : 1;
+      });
+
+      userBreakdown.forEach(b => {
+        const row = document.createElement('div');
+        row.className = 'breakdown-row ' + (b.type === 'you_owe' ? 'owe' : 'owed');
+
+        if (b.type === 'you_owe') {
+          row.innerHTML = `
+            <span class="bd-icon">💸</span>
+            <span class="bd-text">You owe <strong>${escapeHtml(b.other)}</strong></span>
+            <span class="bd-amount">Rs. ${b.amount.toFixed(2)}</span>
+          `;
+        } else {
+          row.innerHTML = `
+            <span class="bd-icon">💰</span>
+            <span class="bd-text"><strong>${escapeHtml(b.other)}</strong> owes you</span>
+            <span class="bd-amount">Rs. ${b.amount.toFixed(2)}</span>
+          `;
+        }
+        breakdownList.appendChild(row);
+      });
+    }
+
+    // Also reload recent expenses
+    loadRecent();
+
+  } catch (err) {
+    breakdownList.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
   }
 }
 
@@ -241,26 +422,17 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
       description: description,
       amount: amount,
       sharedWith: sharedWith,
-      addedBy: currentUser.username, // Track who submitted
+      addedBy: currentUser.username,
       createdAt: new Date().toISOString()
     });
 
-    showMsg('✅ Expense saved successfully!', 'success');
+    showMsg('✅ Expense saved! Returning to dashboard...', 'success');
 
-    // Reset form (but keep payer = current user and self-tick)
-    document.getElementById('description').value = '';
-    document.getElementById('amount').value = '';
+    // Auto-return to dashboard after 1 second
+    setTimeout(() => {
+      showDashboard();
+    }, 1000);
 
-    // Reset checkboxes to default (only current user ticked)
-    document.querySelectorAll('#membersCheckboxes input[type="checkbox"]').forEach(cb => {
-      cb.checked = (cb.value === currentUser.name);
-    });
-
-    // Reset payer to current user
-    document.getElementById('payerSelect').value = currentUser.name;
-
-    document.getElementById('preview').classList.add('hidden');
-    loadRecent();
   } catch (err) {
     showMsg('Error: ' + err.message, 'error');
   } finally {
@@ -272,13 +444,10 @@ function showMsg(text, type) {
   const msg = document.getElementById('message');
   msg.textContent = text;
   msg.className = 'message ' + type;
-  if (type === 'success') {
-    setTimeout(() => { msg.textContent = ''; msg.className = 'message'; }, 3000);
-  }
 }
 
 // ============================================================
-// MY RECENT EXPENSES (filtered to logged-in user)
+// MY RECENT EXPENSES
 // ============================================================
 async function loadRecent() {
   const list = document.getElementById('recentList');
@@ -287,19 +456,17 @@ async function loadRecent() {
   try {
     const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-
-    // Filter to only expenses paid by current user
     const myExpenses = snapshot.docs.filter(d => d.data().payer === currentUser.name);
 
     if (myExpenses.length === 0) {
-      list.innerHTML = '<p class="empty">You haven\'t added any expenses yet.</p>';
+      list.innerHTML = '<p class="empty">You haven\'t added any expenses yet. Tap ➕ Add to get started!</p>';
       return;
     }
 
     list.innerHTML = '';
     let count = 0;
     myExpenses.forEach(docSnap => {
-      if (count >= 10) return;
+      if (count >= 5) return;
       count++;
       const e = docSnap.data();
       const date = new Date(e.createdAt).toLocaleString();
