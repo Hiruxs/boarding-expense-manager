@@ -1026,6 +1026,302 @@ body {
 }
 
 /* ============================================================
+   CATEGORIES (Admin form + badges everywhere)
+   ============================================================ */
+.category-form {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.category-form input {
+  padding: 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.category-form input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+#categoryIcon {
+  text-align: center;
+  font-size: 20px;
+}
+
+@media (max-width: 600px) {
+  .category-form {
+    grid-template-columns: 80px 1fr;
+  }
+  .category-form button {
+    grid-column: 1 / -1;
+  }
+}
+
+.category-item .item-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cat-icon {
+  font-size: 22px;
+}
+
+.default-badge {
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.protected-label {
+  font-size: 12px;
+  color: #a0aec0;
+  font-style: italic;
+}
+
+/* Category badge on expenses */
+.category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #ebf4ff;
+  color: #2c5282;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.category-badge.uncategorized {
+  background: #edf2f7;
+  color: #718096;
+}
+
+/* User category select dropdown */
+#categorySelect {
+  font-size: 15px;
+  padding: 12px;
+}
+
+#categorySelect option {
+  padding: 8px;
+  font-size: 15px;
+}
+
+/* ============================================================
+   CATEGORY BREAKDOWN WIDGET (This month by category)
+   ============================================================ */
+.cat-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.cat-total strong {
+  font-size: 18px;
+}
+
+.cat-bar-row {
+  background: white;
+  padding: 12px 15px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.cat-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.cat-bar-name {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.cat-bar-amount {
+  font-weight: 700;
+  color: #4338ca;
+}
+
+.cat-bar-track {
+  height: 8px;
+  background: #edf2f7;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.cat-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.cat-bar-meta {
+  font-size: 11px;
+  color: #a0aec0;
+}
+
+/* ============================================================
+   USER VIEW TABS (Dashboard / History)
+   ============================================================ */
+.user-tabs,
+.history-subtabs {
+  display: flex;
+  background: white;
+  border-radius: 12px;
+  padding: 5px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  gap: 5px;
+}
+
+.utab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 12px 15px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #718096;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.utab.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+}
+
+.utab:hover:not(.active) {
+  background: #f7fafc;
+}
+
+.history-subtabs {
+  margin-top: 0;
+}
+
+/* ============================================================
+   MONTHLY HISTORY SECTIONS
+   ============================================================ */
+.month-section {
+  background: white;
+  border-radius: 15px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  margin-bottom: 15px;
+  border-bottom: 2px solid #f7fafc;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.month-header h3 {
+  font-size: 18px;
+  color: #2d3748;
+  margin: 0;
+}
+
+.month-total {
+  font-size: 13px;
+  color: #718096;
+  font-weight: 600;
+}
+
+.history-expense {
+  margin-bottom: 10px;
+}
+
+.history-expense:last-child {
+  margin-bottom: 0;
+}
+
+/* Settlement card in history */
+.settlement-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 15px;
+  background: #f7fafc;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  border-left: 4px solid #cbd5e0;
+}
+
+.settlement-card.paid-out {
+  background: #fff5f5;
+  border-left-color: #fc8181;
+}
+
+.settlement-card.received-in {
+  background: #f0fff4;
+  border-left-color: #68d391;
+}
+
+.set-icon {
+  font-size: 20px;
+}
+
+.set-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.set-text strong {
+  font-size: 14px;
+  color: #2d3748;
+}
+
+.set-date {
+  font-size: 12px;
+  color: #718096;
+}
+
+.set-amount {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.set-amount.out {
+  color: #c53030;
+}
+
+.set-amount.in {
+  color: #2f855a;
+}
+
+.settle-out { color: #c53030; }
+.settle-in { color: #2f855a; }
+
+/* ============================================================
    ADD BUTTON in topbar
    ============================================================ */
 .btn-add {
