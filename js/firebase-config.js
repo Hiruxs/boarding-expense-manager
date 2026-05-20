@@ -16,6 +16,7 @@ import {
   addDoc,
   getDocs,
   deleteDoc,
+  updateDoc,
   doc,
   query,
   orderBy,
@@ -32,12 +33,13 @@ messagingSenderId: "1012179644838",
 appId: "1:1012179644838:web:f673e4df0f628b0b1a5f67"
 };
 
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // 🔑 Admin password — CHANGE THIS before deploying!
-const ADMIN_PASSWORD = "Kalana@12";
+const ADMIN_PASSWORD = "Boarding@123";
 
 export {
   db,
@@ -45,6 +47,7 @@ export {
   addDoc,
   getDocs,
   deleteDoc,
+  updateDoc,
   doc,
   query,
   orderBy,
