@@ -336,7 +336,9 @@ async function loadExpenses() {
     list.innerHTML = '';
     snapshot.forEach(docSnap => {
       const e = docSnap.data();
-      const date = new Date(e.createdAt).toLocaleString();
+      const date = e.expenseDate
+        ? new Date(e.expenseDate + 'T00:00:00').toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' })
+        : new Date(e.createdAt).toLocaleString();
       const share = (e.amount / e.sharedWith.length).toFixed(2);
       const categoryBadge = e.category
         ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
