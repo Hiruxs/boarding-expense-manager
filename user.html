@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>User - Boarding Expense Manager</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="alternate icon" type="image/png" href="favicon-32.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="theme-color" content="#0a0a0a" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -134,9 +138,16 @@
             <input type="number" id="amount" placeholder="e.g. 1000" min="1" step="0.01" />
           </div>
 
-          <!-- Step 5: Who shares -->
+          <!-- Step 5: Date -->
           <div class="form-group">
-            <label>5️⃣ Split among these members</label>
+            <label>5️⃣ Date of expense</label>
+            <input type="date" id="expenseDate" />
+            <p class="hint-small">Defaults to today. Change it if the expense happened on another day.</p>
+          </div>
+
+          <!-- Step 6: Who shares -->
+          <div class="form-group">
+            <label>6️⃣ Split among these members</label>
             <p class="hint-small">You're auto-ticked. Untick if it doesn't include you, or tick others.</p>
             <div id="membersCheckboxes" class="checkbox-grid"></div>
           </div>
