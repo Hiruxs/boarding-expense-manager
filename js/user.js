@@ -216,6 +216,8 @@ function resetForm() {
   document.getElementById('description').value = '';
   document.getElementById('amount').value = '';
   document.getElementById('payerSelect').value = currentUser.name;
+  // Set date to today (local timezone)
+  document.getElementById('expenseDate').value = getTodayLocal();
   // Reset category to "Other" (default)
   const catSelect = document.getElementById('categorySelect');
   const otherOption = Array.from(catSelect.options).find(o => o.value === 'Other');
@@ -226,6 +228,14 @@ function resetForm() {
   document.getElementById('preview').classList.add('hidden');
   document.getElementById('message').textContent = '';
   document.getElementById('message').className = 'message';
+}
+
+// Returns today's date as YYYY-MM-DD in local timezone (for <input type="date">)
+function getTodayLocal() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60000);
+  return local.toISOString().split('T')[0];
 }
 
 // ============================================================
@@ -620,12 +630,21 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
   const sharedWith = getSelectedMembers();
   const category = document.getElementById('categorySelect').value || 'Other';
   const categoryIcon = getCategoryIcon(category);
+  const dateValue = document.getElementById('expenseDate').value;
 
   if (!payer) return showMsg('Please select who paid', 'error');
   if (!description) return showMsg('Please enter a description', 'error');
   if (!category) return showMsg('Please select a category', 'error');
   if (!amount || amount <= 0) return showMsg('Please enter a valid amount', 'error');
+  if (!dateValue) return showMsg('Please select a date', 'error');
   if (sharedWith.length === 0) return showMsg('Please tick at least one member to split with', 'error');
+
+  // Build the expense date. Combine chosen date with current time so multiple
+  // expenses on the same day still sort in the order they were entered.
+  const now = new Date();
+  const chosen = new Date(dateValue + 'T00:00:00');
+  chosen.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+  const expenseDateISO = chosen.toISOString();
 
   try {
     document.getElementById('submitBtn').disabled = true;
@@ -639,7 +658,9 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
       category: category,
       categoryIcon: categoryIcon,
       addedBy: currentUser.username,
-      createdAt: new Date().toISOString()
+      expenseDate: dateValue,          // chosen date (YYYY-MM-DD)
+      createdAt: expenseDateISO,        // used for sorting & monthly grouping
+      submittedAt: now.toISOString()    // actual submission time (audit)
     });
 
     showMsg('✅ Expense saved! Returning to dashboard...', 'success');
@@ -680,7 +701,7 @@ async function loadRecent() {
       if (count >= 5) return;
       count++;
       const e = docSnap.data();
-      const date = new Date(e.createdAt).toLocaleString();
+      const date = formatExpenseDate(e);
       const share = (e.amount / e.sharedWith.length).toFixed(2);
       const categoryBadge = e.category
         ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
@@ -719,6 +740,16 @@ function escapeHtml(text) {
 
 function escapeAttr(text) {
   return String(text).replace(/"/g, '&quot;');
+}
+
+// Format an expense's date for display. Prefers the user-chosen expenseDate
+// (YYYY-MM-DD), falling back to createdAt for older records.
+function formatExpenseDate(e) {
+  if (e.expenseDate) {
+    const d = new Date(e.expenseDate + 'T00:00:00');
+    return d.toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return new Date(e.createdAt).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // ============================================================
@@ -896,7 +927,7 @@ async function loadHistoryExpenses() {
       `;
 
       group.items.forEach(e => {
-        const date = new Date(e.createdAt).toLocaleDateString();
+        const date = formatExpenseDate(e);
         const shared = e.sharedWith || [];
         const share = parseFloat(e.amount) / shared.length;
         const isPayer = e.payer === me;
