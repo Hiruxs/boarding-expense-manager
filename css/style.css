@@ -661,6 +661,23 @@ h3 { font-size: 16px; }
   padding-right: 36px;
 }
 
+/* Date input — dark theme friendly */
+.form-group input[type="date"] {
+  cursor: pointer;
+  color-scheme: dark;
+  font-family: inherit;
+}
+
+.form-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6) sepia(1) saturate(5) hue-rotate(-15deg);
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.form-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 /* Checkboxes */
 .checkbox-grid {
   display: grid;
