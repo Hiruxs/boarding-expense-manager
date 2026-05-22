@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="redGlow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#dc2626"/>
+    </linearGradient>
+    <radialGradient id="bgGlow" cx="50%" cy="25%" r="70%">
+      <stop offset="0%" stop-color="#1a1a1a"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Dark rounded background -->
+  <rect width="100" height="100" rx="22" fill="url(#bgGlow)"/>
+
+  <!-- Subtle red glow at top -->
+  <circle cx="50" cy="22" r="38" fill="url(#redGlow)" opacity="0.18"/>
+
+  <!-- Top red accent line -->
+  <rect x="28" y="16" width="44" height="2.5" rx="1.25" fill="#dc2626"/>
+
+  <!-- Stylized "B" for Boarding -->
+  <path d="M 34 30
+           L 34 70
+           L 55 70
+           C 63 70 68 65.5 68 58.5
+           C 68 53.5 65 49.8 60.5 48.5
+           C 64 47 66 43.5 66 39
+           C 66 32.5 61 30 54 30
+           Z
+           M 42 37 L 53 37 C 56.5 37 58 39 58 42 C 58 45 56.5 47 53 47 L 42 47 Z
+           M 42 53 L 54 53 C 58 53 60 55 60 58.5 C 60 62 58 63.5 54 63.5 L 42 63.5 Z"
+        fill="#fafafa"/>
+
+  <!-- Red notification dot -->
+  <circle cx="74" cy="30" r="6" fill="#dc2626"/>
+  <circle cx="74" cy="30" r="6" fill="none" stroke="#0a0a0a" stroke-width="2"/>
+</svg>
