@@ -4,12 +4,14 @@ import {
   addDoc,
   getDocs,
   deleteDoc,
+  updateDoc,
   doc,
   query,
   orderBy
 } from './firebase-config.js';
 
 let allMembers = [];
+let editingExpenseId = null; // null = adding new, otherwise editing this expense
 let allCategories = [];
 let currentUser = null; // { name, username }
 
@@ -99,7 +101,12 @@ document.getElementById('userLogoutBtn').addEventListener('click', () => {
 // VIEW TOGGLE (Dashboard <-> Form)
 // ============================================================
 document.getElementById('openFormBtn').addEventListener('click', () => {
+  editingExpenseId = null; // fresh add, not edit
+  document.getElementById('formTitle').textContent = 'Add New Expense';
+  document.getElementById('submitBtn').textContent = '💾 Save Expense';
+  // Hide ALL views (dashboard AND history) before showing the form
   document.getElementById('dashboardView').classList.add('hidden');
+  document.getElementById('historyView').classList.add('hidden');
   document.getElementById('formView').classList.remove('hidden');
   resetForm();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -111,8 +118,49 @@ document.getElementById('closeFormBtn').addEventListener('click', () => {
 
 function showDashboard() {
   document.getElementById('formView').classList.add('hidden');
+  document.getElementById('historyView').classList.add('hidden');
   document.getElementById('dashboardView').classList.remove('hidden');
+  // Reset the view tabs so Dashboard is marked active
+  document.querySelectorAll('.user-tabs .utab').forEach(t => {
+    t.classList.toggle('active', t.dataset.utab === 'dashboard');
+  });
   loadDashboard();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Open the form pre-filled to EDIT an existing expense
+function openEditForm(expense) {
+  editingExpenseId = expense.id;
+
+  // Hide other views, show form
+  document.getElementById('dashboardView').classList.add('hidden');
+  document.getElementById('historyView').classList.add('hidden');
+  document.getElementById('formView').classList.remove('hidden');
+
+  // Switch form to edit mode
+  document.getElementById('formTitle').textContent = '✏️ Edit Expense';
+  document.getElementById('submitBtn').textContent = '💾 Update Expense';
+
+  // Pre-fill fields
+  document.getElementById('payerSelect').value = expense.payer;
+  document.getElementById('description').value = expense.description;
+  document.getElementById('amount').value = expense.amount;
+
+  // Category
+  const catSelect = document.getElementById('categorySelect');
+  const catOption = Array.from(catSelect.options).find(o => o.value === (expense.category || 'Other'));
+  catSelect.value = catOption ? (expense.category || 'Other') : 'Other';
+
+  // Date
+  document.getElementById('expenseDate').value = expense.expenseDate
+    || (expense.createdAt ? expense.createdAt.split('T')[0] : getTodayLocal());
+
+  // Checkboxes — tick the members in sharedWith
+  document.querySelectorAll('#membersCheckboxes input[type="checkbox"]').forEach(cb => {
+    cb.checked = (expense.sharedWith || []).includes(cb.value);
+  });
+
+  updatePreview();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -310,10 +358,10 @@ async function loadDashboard() {
       const amount = parseFloat(p.amount);
 
       if (!pendingByDebtor[from]) pendingByDebtor[from] = {};
-      pendingByDebtor[from][to] = { id, amount };
+      pendingByDebtor[from][to] = { id, amount, isPartial: !!p.isPartial };
 
       if (!pendingByCreditor[to]) pendingByCreditor[to] = {};
-      pendingByCreditor[to][from] = { id, amount };
+      pendingByCreditor[to][from] = { id, amount, isPartial: !!p.isPartial };
 
       // Pending payments visually reduce the debt
       if (debts[from] && debts[from][to]) {
@@ -358,7 +406,8 @@ async function loadDashboard() {
         other: creditor,
         type: 'waiting',
         amount: info.amount,
-        pendingId: info.id
+        pendingId: info.id,
+        isPartial: info.isPartial
       });
     });
 
@@ -435,9 +484,12 @@ async function loadDashboard() {
 
         if (b.type === 'waiting') {
           row.className = 'breakdown-row waiting';
+          const partialTag = b.isPartial
+            ? '<span class="partial-tag">partial</span>'
+            : '';
           row.innerHTML = `
             <span class="bd-icon">⏳</span>
-            <span class="bd-text">Waiting for <strong>${escapeHtml(b.other)}</strong> to confirm</span>
+            <span class="bd-text">Paid <strong>${escapeHtml(b.other)}</strong> · awaiting confirm ${partialTag}</span>
             <span class="bd-amount">Rs. ${b.amount.toFixed(2)}</span>
             <button class="btn-cancel-pay">Cancel</button>
           `;
@@ -445,9 +497,14 @@ async function loadDashboard() {
             cancelPendingPayment(b.pendingId, b.other, b.amount));
         } else if (b.type === 'you_owe') {
           row.className = 'breakdown-row owe';
+          // Is there a pending partial payment to this same person? Then this is the remaining.
+          const hasPending = (pendingByDebtor[me] && pendingByDebtor[me][b.other]);
+          const label = hasPending
+            ? `Still to pay <strong>${escapeHtml(b.other)}</strong>`
+            : `You owe <strong>${escapeHtml(b.other)}</strong>`;
           row.innerHTML = `
             <span class="bd-icon">💸</span>
-            <span class="bd-text">You owe <strong>${escapeHtml(b.other)}</strong></span>
+            <span class="bd-text">${label}</span>
             <span class="bd-amount">Rs. ${b.amount.toFixed(2)}</span>
             <button class="btn-mark-paid">✓ Mark as Paid</button>
           `;
@@ -481,18 +538,35 @@ async function loadDashboard() {
 async function markAsPaid(creditor, suggestedAmount) {
   const input = prompt(
     `You owe ${creditor} Rs. ${suggestedAmount.toFixed(2)}.\n\n` +
-    `Enter the amount you paid (you can adjust if it's a partial payment):`,
+    `How much did you pay?\n` +
+    `• Enter the full amount to settle completely\n` +
+    `• Enter a smaller amount for a partial payment (the rest stays as "to pay")`,
     suggestedAmount.toFixed(2)
   );
   if (input === null) return;
 
   const amount = parseFloat(input);
   if (isNaN(amount) || amount <= 0) {
-    return alert('Invalid amount');
+    return alert('Invalid amount. Please enter a number greater than 0.');
   }
   if (amount > suggestedAmount + 0.01) {
     if (!confirm(`You're claiming Rs. ${amount.toFixed(2)} but you only owe Rs. ${suggestedAmount.toFixed(2)}.\nContinue anyway?`)) return;
   }
+
+  const remaining = Math.max(0, suggestedAmount - amount);
+  const isPartial = remaining > 0.01;
+
+  // Build a clear confirmation message
+  let confirmMsg = `Confirm payment to ${creditor}:\n\n`;
+  confirmMsg += `💸 Paying now: Rs. ${amount.toFixed(2)}\n`;
+  if (isPartial) {
+    confirmMsg += `⏳ Remaining to pay: Rs. ${remaining.toFixed(2)}\n\n`;
+    confirmMsg += `${creditor} will confirm the Rs. ${amount.toFixed(2)}. The remaining Rs. ${remaining.toFixed(2)} will stay on your dashboard as still owed.`;
+  } else {
+    confirmMsg += `✅ This fully settles your debt to ${creditor}.`;
+  }
+
+  if (!confirm(confirmMsg)) return;
 
   try {
     await addDoc(collection(db, 'pendingSettlements'), {
@@ -500,9 +574,16 @@ async function markAsPaid(creditor, suggestedAmount) {
       to: creditor,
       amount: amount,
       claimedAt: new Date().toISOString(),
-      status: 'pending'
+      status: 'pending',
+      isPartial: isPartial,
+      remainingAtClaim: remaining
     });
-    alert(`✅ Marked as paid.\n${creditor} will be asked to confirm receipt of Rs. ${amount.toFixed(2)}.`);
+
+    if (isPartial) {
+      alert(`✅ Partial payment marked.\n\nPaid: Rs. ${amount.toFixed(2)}\nStill to pay: Rs. ${remaining.toFixed(2)}\n\n${creditor} will confirm the amount you paid.`);
+    } else {
+      alert(`✅ Full payment marked.\n${creditor} will be asked to confirm receipt of Rs. ${amount.toFixed(2)}.`);
+    }
     loadDashboard();
   } catch (err) {
     alert('Error: ' + err.message);
@@ -648,22 +729,40 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
 
   try {
     document.getElementById('submitBtn').disabled = true;
-    showMsg('Saving...', 'info');
+    showMsg(editingExpenseId ? 'Updating...' : 'Saving...', 'info');
 
-    await addDoc(collection(db, 'expenses'), {
-      payer: payer,
-      description: description,
-      amount: amount,
-      sharedWith: sharedWith,
-      category: category,
-      categoryIcon: categoryIcon,
-      addedBy: currentUser.username,
-      expenseDate: dateValue,          // chosen date (YYYY-MM-DD)
-      createdAt: expenseDateISO,        // used for sorting & monthly grouping
-      submittedAt: now.toISOString()    // actual submission time (audit)
-    });
+    if (editingExpenseId) {
+      // UPDATE existing expense
+      await updateDoc(doc(db, 'expenses', editingExpenseId), {
+        payer: payer,
+        description: description,
+        amount: amount,
+        sharedWith: sharedWith,
+        category: category,
+        categoryIcon: categoryIcon,
+        expenseDate: dateValue,
+        createdAt: expenseDateISO,
+        editedAt: now.toISOString()
+      });
+      showMsg('✅ Expense updated! Returning to dashboard...', 'success');
+    } else {
+      // ADD new expense
+      await addDoc(collection(db, 'expenses'), {
+        payer: payer,
+        description: description,
+        amount: amount,
+        sharedWith: sharedWith,
+        category: category,
+        categoryIcon: categoryIcon,
+        addedBy: currentUser.username,
+        expenseDate: dateValue,
+        createdAt: expenseDateISO,
+        submittedAt: now.toISOString()
+      });
+      showMsg('✅ Expense saved! Returning to dashboard...', 'success');
+    }
 
-    showMsg('✅ Expense saved! Returning to dashboard...', 'success');
+    editingExpenseId = null;
     setTimeout(() => showDashboard(), 1000);
   } catch (err) {
     showMsg('Error: ' + err.message, 'error');
@@ -935,6 +1034,10 @@ async function loadHistoryExpenses() {
           ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
           : `<span class="category-badge uncategorized">📦 Uncategorized</span>`;
 
+        // User can edit/delete expenses they added (or, for old records, ones they paid)
+        const canEdit = (e.addedBy && e.addedBy === currentUser.username) ||
+                        (!e.addedBy && e.payer === me);
+
         const card = document.createElement('div');
         card.className = 'expense-card history-expense';
         card.innerHTML = `
@@ -950,7 +1053,18 @@ async function loadHistoryExpenses() {
           <div class="expense-shares">
             <span class="shares-label">Your share: <strong>Rs. ${share.toFixed(2)}</strong> (split among ${shared.length})</span>
           </div>
+          ${canEdit ? `
+          <div class="expense-actions">
+            <button class="btn-edit-expense">✏️ Edit</button>
+            <button class="btn-delete-expense">🗑 Delete</button>
+          </div>` : ''}
         `;
+
+        if (canEdit) {
+          card.querySelector('.btn-edit-expense').addEventListener('click', () => openEditForm(e));
+          card.querySelector('.btn-delete-expense').addEventListener('click', () => deleteMyExpense(e.id, e.description));
+        }
+
         section.appendChild(card);
       });
 
@@ -958,6 +1072,17 @@ async function loadHistoryExpenses() {
     });
   } catch (err) {
     list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+  }
+}
+
+// Delete an expense the user added
+async function deleteMyExpense(id, description) {
+  if (!confirm(`Delete "${description}"?\n\nThis removes it for everyone and recalculates balances.`)) return;
+  try {
+    await deleteDoc(doc(db, 'expenses', id));
+    loadHistoryExpenses();
+  } catch (err) {
+    alert('Error: ' + err.message);
   }
 }
 
