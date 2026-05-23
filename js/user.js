@@ -993,86 +993,163 @@ async function loadHistoryExpenses() {
       return;
     }
 
-    // Group by month
-    const groups = {};
-    myExpenses.forEach(e => {
-      const d = new Date(e.createdAt);
-      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-      const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-      if (!groups[key]) groups[key] = { label, items: [] };
-      groups[key].items.push(e);
-    });
+    // Split by payment role:
+    //   - paidByMe: I was the payer (I fronted the money)
+    //   - shareOnly: someone else paid, I just owe my share
+    const paidByMe = myExpenses.filter(e => e.payer === me);
+    const shareOnly = myExpenses.filter(e => e.payer !== me && (e.sharedWith || []).includes(me));
 
     list.innerHTML = '';
-    Object.keys(groups).sort().reverse().forEach(monthKey => {
-      const group = groups[monthKey];
 
-      // Total spent by user this month (their share)
-      let myMonthShare = 0;
-      group.items.forEach(e => {
-        const shared = e.sharedWith || [];
-        if (shared.includes(me)) {
-          myMonthShare += parseFloat(e.amount) / shared.length;
-        }
-      });
+    // Section 1: Expenses you paid
+    if (paidByMe.length > 0) {
+      list.appendChild(buildRoleSection({
+        title: '💰 Expenses You Paid',
+        sub: "You fronted the money — others owe you their share",
+        cssClass: 'role-paid',
+        expenses: paidByMe,
+        me,
+        showShareLabel: 'paid'
+      }));
+    }
 
-      const section = document.createElement('div');
-      section.className = 'month-section';
-      section.innerHTML = `
-        <div class="month-header">
-          <h3>${group.label}</h3>
-          <span class="month-total">Your share: Rs. ${myMonthShare.toFixed(2)}</span>
-        </div>
-      `;
+    // Section 2: Expenses you share in
+    if (shareOnly.length > 0) {
+      list.appendChild(buildRoleSection({
+        title: '💸 Expenses You Share In',
+        sub: 'Someone else paid — your share counts toward what you owe them',
+        cssClass: 'role-owe',
+        expenses: shareOnly,
+        me,
+        showShareLabel: 'owe'
+      }));
+    }
 
-      group.items.forEach(e => {
-        const date = formatExpenseDate(e);
-        const shared = e.sharedWith || [];
-        const share = parseFloat(e.amount) / shared.length;
-        const isPayer = e.payer === me;
-        const categoryBadge = e.category
-          ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
-          : `<span class="category-badge uncategorized">📦 Uncategorized</span>`;
-
-        // User can edit/delete expenses they added (or, for old records, ones they paid)
-        const canEdit = (e.addedBy && e.addedBy === currentUser.username) ||
-                        (!e.addedBy && e.payer === me);
-
-        const card = document.createElement('div');
-        card.className = 'expense-card history-expense';
-        card.innerHTML = `
-          <div class="expense-header">
-            <strong>${escapeHtml(e.description)}</strong>
-            <span class="amount">Rs. ${parseFloat(e.amount).toFixed(2)}</span>
-          </div>
-          <div class="expense-meta">
-            ${categoryBadge}
-            <span>${isPayer ? '💰 You paid' : '👥 Paid by ' + escapeHtml(e.payer)}</span>
-            <span>📅 ${date}</span>
-          </div>
-          <div class="expense-shares">
-            <span class="shares-label">Your share: <strong>Rs. ${share.toFixed(2)}</strong> (split among ${shared.length})</span>
-          </div>
-          ${canEdit ? `
-          <div class="expense-actions">
-            <button class="btn-edit-expense">✏️ Edit</button>
-            <button class="btn-delete-expense">🗑 Delete</button>
-          </div>` : ''}
-        `;
-
-        if (canEdit) {
-          card.querySelector('.btn-edit-expense').addEventListener('click', () => openEditForm(e));
-          card.querySelector('.btn-delete-expense').addEventListener('click', () => deleteMyExpense(e.id, e.description));
-        }
-
-        section.appendChild(card);
-      });
-
-      list.appendChild(section);
-    });
   } catch (err) {
     list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
   }
+}
+
+// Build a role-based section (paid / owe), with expenses grouped by month inside
+function buildRoleSection({ title, sub, cssClass, expenses, me, showShareLabel }) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'expense-role-group ' + cssClass;
+
+  // Section totals
+  let totalAmount = 0;   // total bill amount (for paid section)
+  let totalMyShare = 0;  // my share across these
+  expenses.forEach(e => {
+    const shared = e.sharedWith || [];
+    if (shared.includes(me)) totalMyShare += parseFloat(e.amount) / shared.length;
+    totalAmount += parseFloat(e.amount);
+  });
+
+  const headerTotal = showShareLabel === 'paid'
+    ? `Paid: Rs. ${totalAmount.toFixed(2)} · Your share: Rs. ${totalMyShare.toFixed(2)}`
+    : `You owe: Rs. ${totalMyShare.toFixed(2)}`;
+
+  wrapper.innerHTML = `
+    <div class="role-group-header">
+      <div>
+        <h3>${title}</h3>
+        <span class="role-group-sub">${sub}</span>
+      </div>
+      <span class="role-group-total">${headerTotal}</span>
+    </div>
+  `;
+
+  // Group by month inside this section
+  const groups = {};
+  expenses.forEach(e => {
+    const d = new Date(e.createdAt);
+    const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+    if (!groups[key]) groups[key] = { label, items: [] };
+    groups[key].items.push(e);
+  });
+
+  Object.keys(groups).sort().reverse().forEach(monthKey => {
+    const group = groups[monthKey];
+
+    const monthBlock = document.createElement('div');
+    monthBlock.className = 'role-month';
+
+    let monthShare = 0;
+    group.items.forEach(e => {
+      const shared = e.sharedWith || [];
+      if (shared.includes(me)) monthShare += parseFloat(e.amount) / shared.length;
+    });
+
+    monthBlock.innerHTML = `
+      <div class="role-month-header">
+        <span class="role-month-label">${group.label}</span>
+        <span class="role-month-total">Rs. ${monthShare.toFixed(2)}</span>
+      </div>
+    `;
+
+    group.items.forEach(e => {
+      monthBlock.appendChild(buildExpenseCard(e, me));
+    });
+
+    wrapper.appendChild(monthBlock);
+  });
+
+  return wrapper;
+}
+
+// Build a single expense card (used in both role sections)
+function buildExpenseCard(e, me) {
+  const date = formatExpenseDate(e);
+  const shared = e.sharedWith || [];
+  const share = parseFloat(e.amount) / shared.length;
+  const isPayer = e.payer === me;
+  const categoryBadge = e.category
+    ? `<span class="category-badge"><span>${escapeHtml(e.categoryIcon || '🏷️')}</span> ${escapeHtml(e.category)}</span>`
+    : `<span class="category-badge uncategorized">📦 Uncategorized</span>`;
+
+  // Who owes whom line
+  let roleLine;
+  if (isPayer) {
+    const othersCount = shared.filter(p => p !== me).length;
+    roleLine = othersCount > 0
+      ? `💰 You paid · ${othersCount} ${othersCount === 1 ? 'person owes' : 'people owe'} you`
+      : `💰 You paid (just you)`;
+  } else {
+    roleLine = `👥 Paid by ${escapeHtml(e.payer)} · you owe them`;
+  }
+
+  // User can edit/delete expenses they added (or, for old records, ones they paid)
+  const canEdit = (e.addedBy && e.addedBy === currentUser.username) ||
+                  (!e.addedBy && e.payer === me);
+
+  const card = document.createElement('div');
+  card.className = 'expense-card history-expense';
+  card.innerHTML = `
+    <div class="expense-header">
+      <strong>${escapeHtml(e.description)}</strong>
+      <span class="amount">Rs. ${parseFloat(e.amount).toFixed(2)}</span>
+    </div>
+    <div class="expense-meta">
+      ${categoryBadge}
+      <span>${roleLine}</span>
+      <span>📅 ${date}</span>
+    </div>
+    <div class="expense-shares">
+      <span class="shares-label">Your share: <strong>Rs. ${share.toFixed(2)}</strong> (split among ${shared.length})</span>
+    </div>
+    ${canEdit ? `
+    <div class="expense-actions">
+      <button class="btn-edit-expense">✏️ Edit</button>
+      <button class="btn-delete-expense">🗑 Delete</button>
+    </div>` : ''}
+  `;
+
+  if (canEdit) {
+    card.querySelector('.btn-edit-expense').addEventListener('click', () => openEditForm(e));
+    card.querySelector('.btn-delete-expense').addEventListener('click', () => deleteMyExpense(e.id, e.description));
+  }
+
+  return card;
 }
 
 // Delete an expense the user added
@@ -1094,71 +1171,211 @@ async function loadHistorySettlements() {
   list.innerHTML = '<p class="loading">Loading...</p>';
 
   try {
-    const snapshot = await getDocs(collection(db, 'settlements'));
     const me = currentUser.name;
+    const [settlementsSnap, pendingSnap, expensesSnap] = await Promise.all([
+      getDocs(collection(db, 'settlements')),
+      getDocs(collection(db, 'pendingSettlements')),
+      getDocs(collection(db, 'expenses'))
+    ]);
 
-    const mySettlements = snapshot.docs
+    // ---------- 1. COMPLETED (confirmed settlements involving me) ----------
+    const completed = settlementsSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(s => s.from === me || s.to === me)
       .sort((a, b) => new Date(b.settledAt) - new Date(a.settledAt));
 
-    if (mySettlements.length === 0) {
-      list.innerHTML = '<p class="empty">No settlements yet.</p>';
+    // ---------- 2. PENDING (claims awaiting confirmation involving me) ----------
+    const pending = pendingSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(s => s.from === me || s.to === me)
+      .sort((a, b) => new Date(b.claimedAt) - new Date(a.claimedAt));
+
+    // ---------- 3. REMAINING (outstanding debts after confirmed + pending) ----------
+    // Rebuild net debts the same way the dashboard does
+    const debts = {};
+    expensesSnap.forEach(docSnap => {
+      const e = docSnap.data();
+      const payer = e.payer;
+      const amount = parseFloat(e.amount);
+      const shared = e.sharedWith || [];
+      if (shared.length === 0) return;
+      const sharePerPerson = amount / shared.length;
+      shared.forEach(person => {
+        if (person !== payer) {
+          if (!debts[person]) debts[person] = {};
+          if (!debts[person][payer]) debts[person][payer] = 0;
+          debts[person][payer] += sharePerPerson;
+        }
+      });
+    });
+    // subtract confirmed settlements
+    settlementsSnap.forEach(docSnap => {
+      const s = docSnap.data();
+      if (debts[s.from] && debts[s.from][s.to]) {
+        debts[s.from][s.to] -= parseFloat(s.amount);
+        if (debts[s.from][s.to] <= 0.01) delete debts[s.from][s.to];
+      }
+    });
+    // subtract pending settlements
+    pendingSnap.forEach(docSnap => {
+      const s = docSnap.data();
+      if (debts[s.from] && debts[s.from][s.to]) {
+        debts[s.from][s.to] -= parseFloat(s.amount);
+        if (debts[s.from][s.to] <= 0.01) delete debts[s.from][s.to];
+      }
+    });
+
+    // Compute my remaining (net per person)
+    const remaining = []; // { other, type: 'you_owe'|'owes_you', amount }
+    const processed = new Set();
+    const others = new Set();
+    for (const debtor in debts) {
+      if (debtor === me) Object.keys(debts[debtor]).forEach(c => others.add(c));
+      for (const creditor in debts[debtor]) {
+        if (creditor === me) others.add(debtor);
+      }
+    }
+    others.forEach(other => {
+      const key = [me, other].sort().join('|');
+      if (processed.has(key)) return;
+      processed.add(key);
+      const iOwe = (debts[me] && debts[me][other]) || 0;
+      const owesMe = (debts[other] && debts[other][me]) || 0;
+      const net = owesMe - iOwe;
+      if (Math.abs(net) < 0.01) return;
+      remaining.push({ other, type: net > 0 ? 'owes_you' : 'you_owe', amount: Math.abs(net) });
+    });
+
+    // ---------- RENDER ----------
+    if (completed.length === 0 && pending.length === 0 && remaining.length === 0) {
+      list.innerHTML = '<p class="empty">No settlements or outstanding balances 🎉</p>';
       return;
     }
 
-    const groups = {};
-    mySettlements.forEach(s => {
-      const d = new Date(s.settledAt);
-      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-      const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-      if (!groups[key]) groups[key] = { label, items: [] };
-      groups[key].items.push(s);
-    });
-
     list.innerHTML = '';
-    Object.keys(groups).sort().reverse().forEach(monthKey => {
-      const group = groups[monthKey];
 
-      let paidOut = 0;
-      let receivedIn = 0;
-      group.items.forEach(s => {
-        if (s.from === me) paidOut += parseFloat(s.amount);
-        else receivedIn += parseFloat(s.amount);
+    // ===== REMAINING / TO PAY section =====
+    if (remaining.length > 0 || pending.length > 0) {
+      const remSection = document.createElement('div');
+      remSection.className = 'settle-group settle-group-remaining';
+
+      let toPayTotal = 0, toReceiveTotal = 0;
+      remaining.forEach(r => {
+        if (r.type === 'you_owe') toPayTotal += r.amount;
+        else toReceiveTotal += r.amount;
       });
 
-      const section = document.createElement('div');
-      section.className = 'month-section';
-      section.innerHTML = `
-        <div class="month-header">
-          <h3>${group.label}</h3>
-          <span class="month-total">
-            <span class="settle-out">-Rs. ${paidOut.toFixed(2)}</span>
-            ·
-            <span class="settle-in">+Rs. ${receivedIn.toFixed(2)}</span>
-          </span>
+      remSection.innerHTML = `
+        <div class="settle-group-header remaining">
+          <h3>⏳ Remaining</h3>
+          <span class="settle-group-sub">Not yet settled</span>
         </div>
       `;
 
-      group.items.forEach(s => {
-        const date = new Date(s.settledAt).toLocaleDateString();
+      // Pending (awaiting confirmation)
+      pending.forEach(s => {
         const iPaid = s.from === me;
-
+        const date = new Date(s.claimedAt).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
         const card = document.createElement('div');
-        card.className = 'settlement-card ' + (iPaid ? 'paid-out' : 'received-in');
+        card.className = 'settlement-card pending-settle';
         card.innerHTML = `
-          <span class="set-icon">${iPaid ? '💸' : '💰'}</span>
+          <span class="set-icon">⏳</span>
           <div class="set-text">
-            <strong>${iPaid ? 'You paid ' + escapeHtml(s.to) : escapeHtml(s.from) + ' paid you'}</strong>
-            <span class="set-date">📅 ${date}</span>
+            <strong>${iPaid ? 'You paid ' + escapeHtml(s.to) : escapeHtml(s.from) + ' paid you'} <span class="partial-tag">awaiting confirm</span></strong>
+            <span class="set-date">📅 ${date}${s.isPartial ? ' · partial payment' : ''}</span>
           </div>
-          <span class="set-amount ${iPaid ? 'out' : 'in'}">${iPaid ? '-' : '+'}Rs. ${parseFloat(s.amount).toFixed(2)}</span>
+          <span class="set-amount pending">Rs. ${parseFloat(s.amount).toFixed(2)}</span>
         `;
-        section.appendChild(card);
+        remSection.appendChild(card);
       });
 
-      list.appendChild(section);
-    });
+      // Outstanding (still owed, no action yet)
+      remaining.forEach(r => {
+        const iOwe = r.type === 'you_owe';
+        const card = document.createElement('div');
+        card.className = 'settlement-card ' + (iOwe ? 'paid-out' : 'received-in');
+        card.innerHTML = `
+          <span class="set-icon">${iOwe ? '💸' : '💰'}</span>
+          <div class="set-text">
+            <strong>${iOwe ? 'You still owe ' + escapeHtml(r.other) : escapeHtml(r.other) + ' still owes you'}</strong>
+            <span class="set-date">Outstanding balance</span>
+          </div>
+          <span class="set-amount ${iOwe ? 'out' : 'in'}">${iOwe ? '-' : '+'}Rs. ${r.amount.toFixed(2)}</span>
+        `;
+        remSection.appendChild(card);
+      });
+
+      if (remaining.length === 0 && pending.length > 0) {
+        // only pending, nothing else outstanding — fine
+      }
+
+      list.appendChild(remSection);
+    }
+
+    // ===== COMPLETED / ALREADY PAID section =====
+    if (completed.length > 0) {
+      const compSection = document.createElement('div');
+      compSection.className = 'settle-group settle-group-completed';
+      compSection.innerHTML = `
+        <div class="settle-group-header completed">
+          <h3>✅ Already Paid</h3>
+          <span class="settle-group-sub">Confirmed settlements</span>
+        </div>
+      `;
+
+      // Group completed by month
+      const groups = {};
+      completed.forEach(s => {
+        const d = new Date(s.settledAt);
+        const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+        if (!groups[key]) groups[key] = { label, items: [] };
+        groups[key].items.push(s);
+      });
+
+      Object.keys(groups).sort().reverse().forEach(monthKey => {
+        const group = groups[monthKey];
+        let paidOut = 0, receivedIn = 0;
+        group.items.forEach(s => {
+          if (s.from === me) paidOut += parseFloat(s.amount);
+          else receivedIn += parseFloat(s.amount);
+        });
+
+        const monthBlock = document.createElement('div');
+        monthBlock.className = 'settle-month';
+        monthBlock.innerHTML = `
+          <div class="settle-month-header">
+            <span class="settle-month-label">${group.label}</span>
+            <span class="month-total">
+              <span class="settle-out">-Rs. ${paidOut.toFixed(2)}</span>
+              ·
+              <span class="settle-in">+Rs. ${receivedIn.toFixed(2)}</span>
+            </span>
+          </div>
+        `;
+
+        group.items.forEach(s => {
+          const date = new Date(s.settledAt).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
+          const iPaid = s.from === me;
+          const card = document.createElement('div');
+          card.className = 'settlement-card ' + (iPaid ? 'paid-out' : 'received-in');
+          card.innerHTML = `
+            <span class="set-icon">${iPaid ? '💸' : '💰'}</span>
+            <div class="set-text">
+              <strong>${iPaid ? 'You paid ' + escapeHtml(s.to) : escapeHtml(s.from) + ' paid you'}</strong>
+              <span class="set-date">📅 ${date}</span>
+            </div>
+            <span class="set-amount ${iPaid ? 'out' : 'in'}">${iPaid ? '-' : '+'}Rs. ${parseFloat(s.amount).toFixed(2)}</span>
+          `;
+          monthBlock.appendChild(card);
+        });
+
+        compSection.appendChild(monthBlock);
+      });
+
+      list.appendChild(compSection);
+    }
+
   } catch (err) {
     list.innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
   }
