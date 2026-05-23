@@ -1549,6 +1549,65 @@ h3 { font-size: 16px; }
 
 .history-expense:last-child { margin-bottom: 0; }
 
+/* Edit/Delete buttons on history expenses */
+.expense-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.btn-edit-expense {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-bright);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-edit-expense:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.btn-delete-expense {
+  background: transparent;
+  color: var(--accent-hover);
+  border: 1px solid var(--accent-dim);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-delete-expense:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Partial payment tag */
+.partial-tag {
+  display: inline-block;
+  background: var(--warning-dim);
+  color: var(--warning);
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 4px;
+}
+
 .settlement-card {
   display: grid;
   grid-template-columns: auto 1fr auto;
