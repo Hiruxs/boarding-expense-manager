@@ -1549,6 +1549,90 @@ h3 { font-size: 16px; }
 
 .history-expense:last-child { margin-bottom: 0; }
 
+/* ============================================================
+   EXPENSE HISTORY ROLE GROUPS (You Paid / You Share In)
+   ============================================================ */
+.expense-role-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.expense-role-group.role-paid {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.expense-role-group.role-owe {
+  border-color: var(--accent-dim);
+}
+
+.role-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.role-group-header h3 {
+  font-size: 16px;
+  margin: 0 0 2px 0;
+}
+
+.role-paid .role-group-header h3 { color: var(--success); }
+.role-owe .role-group-header h3 { color: var(--accent-hover); }
+
+.role-group-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.role-group-total {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.role-paid .role-group-total { color: var(--success); }
+.role-owe .role-group-total { color: var(--accent-hover); }
+
+.role-month {
+  margin-bottom: 16px;
+}
+
+.role-month:last-child { margin-bottom: 0; }
+
+.role-month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.role-month-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.role-month-total {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
 /* Edit/Delete buttons on history expenses */
 .expense-actions {
   display: flex;
@@ -1657,6 +1741,87 @@ h3 { font-size: 16px; }
 
 .settle-out { color: var(--accent-hover); }
 .settle-in { color: var(--success); }
+
+/* ============================================================
+   SETTLEMENT HISTORY GROUPS (Remaining vs Already Paid)
+   ============================================================ */
+.settle-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.settle-group-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settle-group-header h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.settle-group-header.remaining h3 { color: var(--warning); }
+.settle-group-header.completed h3 { color: var(--success); }
+
+.settle-group-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.settle-group-remaining {
+  border-color: var(--warning-dim);
+}
+
+.settle-group-remaining::before {
+  content: '';
+  display: block;
+  position: relative;
+}
+
+/* Pending settlement card (awaiting confirmation) */
+.settlement-card.pending-settle {
+  border-left-color: var(--warning);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.set-amount.pending {
+  color: var(--warning);
+}
+
+/* Month sub-groups inside completed */
+.settle-month {
+  margin-bottom: 16px;
+}
+
+.settle-month:last-child {
+  margin-bottom: 0;
+}
+
+.settle-month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settle-month-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 
 /* ============================================================
    SCROLLBAR (subtle, dark)
